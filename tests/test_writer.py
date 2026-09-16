@@ -2,9 +2,9 @@ import json
 
 from conftest import apply, configure
 
-from agentinit.config import Kind, Mode, Modules
-from agentinit.engine import build
-from agentinit.writer import Action
+from agentic_init.config import Kind, Mode, Modules
+from agentic_init.engine import build
+from agentic_init.writer import Action
 
 
 def test_apply_is_idempotent(python_project):
@@ -24,7 +24,7 @@ def test_user_content_in_claude_md_and_settings_survives(python_project):
 
     claude_md = (python_project / "CLAUDE.md").read_text()
     assert claude_md.startswith("# Team notes\nDeploy on Fridays never.\n")
-    assert "<!-- agentinit:begin commands -->" in claude_md
+    assert "<!-- agentic_init:begin commands -->" in claude_md
     settings = json.loads((python_project / ".claude/settings.json").read_text())
     assert settings["env"] == {"FOO": "bar"}
     assert "Bash(uv run pytest)" in settings["permissions"]["allow"]
@@ -38,15 +38,15 @@ def test_locally_modified_and_unmanaged_files_are_not_overwritten(python_project
     unmanaged = python_project / ".claude/agents/reviewer.md"
     unmanaged.unlink()
     unmanaged.write_text("hand written\n")
-    (python_project / ".agentinit.lock").write_text(
-        (python_project / ".agentinit.lock").read_text().replace('".claude/agents/reviewer.md"', '"gone.md"')
+    (python_project / ".agentic_init.lock").write_text(
+        (python_project / ".agentic_init.lock").read_text().replace('".claude/agents/reviewer.md"', '"gone.md"')
     )
 
     plan = build(python_project).plan
 
     skipped = {c.path: c.reason for c in plan.skipped}
     assert skipped[".claude/skills/implement/SKILL.md"] == "modified locally"
-    assert skipped[".claude/agents/reviewer.md"] == "exists and is not managed by agentinit"
+    assert skipped[".claude/agents/reviewer.md"] == "exists and is not managed by agentic_init"
     assert build(python_project, force=True).plan.skipped == []
 
 
@@ -106,7 +106,7 @@ def test_null_command_disables_a_detected_command(python_project):
     assert build(python_project).blueprint.commands.test is None
     settings = json.loads((python_project / ".claude/settings.json").read_text())
     assert not any("pytest" in rule for rule in settings["permissions"]["allow"])
-    assert "test: null" in (python_project / "agentinit.yaml").read_text()
+    assert "test: null" in (python_project / "agentic_init.yaml").read_text()
 
 
 def test_enterprise_level_sandboxes_audits_and_allowlists_mcp(python_project):

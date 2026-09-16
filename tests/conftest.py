@@ -3,9 +3,9 @@ from pathlib import Path
 
 import pytest
 
-from agentinit import writer
-from agentinit.config import Config, Mode, Project, save_config
-from agentinit.engine import build
+from agentic_init import writer
+from agentic_init.config import Config, Mode, Project, save_config
+from agentic_init.engine import build
 
 
 @pytest.fixture

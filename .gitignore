@@ -5,7 +5,7 @@ dist/
 .pytest_cache/
 .ruff_cache/
 
-# agentinit:begin agent-state
+# agentic_init:begin agent-state
 .claude/settings.local.json
 .claude/state/
-# agentinit:end agent-state
+# agentic_init:end agent-state

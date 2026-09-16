@@ -2,7 +2,7 @@ import json
 
 from conftest import apply, configure
 
-from agentinit.doctor import Level, diagnose
+from agentic_init.doctor import Level, diagnose
 
 
 def test_fresh_setup_has_no_errors_and_detects_breakage(python_project):

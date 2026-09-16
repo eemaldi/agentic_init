@@ -1,0 +1,11 @@
+version: 1
+project:
+  name: agentic_init
+  description: Config-based CLI that bootstraps repositories with a lean, best-practice agentic development setup.
+level: 1
+mode: greenfield
+targets:
+- claude-code
+include:
+  skills: [debug]
+  hooks: [post-edit-format]

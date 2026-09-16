@@ -1,0 +1,116 @@
+import json
+import re
+
+from agentic_init.blueprint import Blueprint, Component, Policy
+from agentic_init.config import Kind
+from agentic_init.targets.base import Block, FileOp, Strategy, frontmatter
+
+SETTINGS_SCHEMA = "https://json.schemastore.org/claude-code-settings.json"
+EDIT_MODES = {"propose": "plan", "ask": "default", "auto": "acceptEdits"}
+HOOK_COMMAND = 'python3 "$CLAUDE_PROJECT_DIR/.claude/hooks/{name}.py"'
+STRICT_SANDBOX = {"failIfUnavailable": True, "allowUnsandboxedCommands": False}
+
+
+CURRENT_DIRECTORY_ARGUMENT = re.compile(r"\s+\.(/\.\.\.)?$")
+
+
+def _bash(command: str) -> list[str]:
+    prefix = CURRENT_DIRECTORY_ARGUMENT.sub("", command)
+    return list(dict.fromkeys([f"Bash({command})", f"Bash({prefix} *)"]))
+
+
+def _permissions(policy: Policy) -> dict:
+    protected = [f"{tool}(./{path})" for path in policy.protected_paths for tool in ("Read", "Edit")]
+    permissions = {
+        "allow": [rule for command in policy.allowed_commands for rule in _bash(command)],
+        "ask": [rule for command in policy.ask_commands for rule in _bash(command)],
+        "deny": [f"Bash({command} *)" for command in policy.denied_commands] + protected,
+        "defaultMode": EDIT_MODES[policy.edits],
+    }
+    if policy.enterprise:
+        permissions["disableBypassPermissionsMode"] = "disable"
+    return permissions
+
+
+def _sandbox(policy: Policy) -> dict:
+    deny_read = [f"./{path.removesuffix('/**')}" for path in policy.protected_paths]
+    sandbox = {"enabled": True, "autoAllowBashIfSandboxed": False, "filesystem": {"denyRead": deny_read}}
+    return sandbox | STRICT_SANDBOX if policy.sandbox == "strict" else sandbox
+
+
+def _enterprise(servers: list[Component]) -> dict:
+    names = [server.name for server in servers]
+    return {
+        "enabledMcpjsonServers": names,
+        "allowedMcpServers": [{"serverName": name} for name in names],
+    }
+
+
+def _hooks(hooks: list[Component]) -> dict:
+    events: dict[str, list] = {}
+    for hook in hooks:
+        entry = {"hooks": [{"type": "command", "command": HOOK_COMMAND.format(name=hook.name)}]}
+        if matcher := hook.meta.get("matcher"):
+            entry = {"matcher": matcher, **entry}
+        events.setdefault(hook.meta["event"], []).append(entry)
+    return events
+
+
+def _skill(skill: Component) -> list[FileOp]:
+    fields = {
+        "name": skill.name,
+        "description": skill.description,
+        "disable-model-invocation": True if skill.meta.get("user_only") else None,
+        "allowed-tools": skill.meta.get("allowed_tools"),
+    }
+    directory = f".claude/skills/{skill.name}"
+    return [
+        FileOp(f"{directory}/SKILL.md", Strategy.OWNED, content=frontmatter(fields, skill.body)),
+        *(FileOp(f"{directory}/{path}", Strategy.OWNED, content=text) for path, text in skill.files.items()),
+    ]
+
+
+def _agent(agent: Component) -> FileOp:
+    fields = {
+        "name": agent.name,
+        "description": agent.description,
+        "tools": ", ".join(agent.meta.get("tools", [])),
+        "model": agent.meta.get("model"),
+    }
+    return FileOp(f".claude/agents/{agent.name}.md", Strategy.OWNED, content=frontmatter(fields, agent.body))
+
+
+def _rule(rule: Component) -> FileOp:
+    content = frontmatter({"paths": rule.meta.get("paths")}, rule.body)
+    return FileOp(f".claude/rules/{rule.name}.md", Strategy.OWNED, content=content)
+
+
+def _hook_script(hook: Component) -> FileOp:
+    return FileOp(f".claude/hooks/{hook.name}.py", Strategy.OWNED, content=hook.files["hook.py"], executable=True)
+
+
+class ClaudeCodeTarget:
+    name = "claude-code"
+
+    def render(self, blueprint: Blueprint) -> list[FileOp]:
+        hooks, servers = blueprint.of(Kind.HOOKS), blueprint.of(Kind.MCP)
+        settings = {"$schema": SETTINGS_SCHEMA, "permissions": _permissions(blueprint.policy)}
+        if blueprint.policy.sandbox != "off":
+            settings["sandbox"] = _sandbox(blueprint.policy)
+        if blueprint.policy.enterprise:
+            settings |= _enterprise(servers)
+        if hooks:
+            settings["hooks"] = _hooks(hooks)
+
+        ops = [
+            FileOp("CLAUDE.md", Strategy.BLOCKS, blocks=tuple(Block(s.id, s.body) for s in blueprint.sections)),
+            FileOp(".claude/settings.json", Strategy.JSON, data=settings),
+            *(op for skill in blueprint.of(Kind.SKILLS) for op in _skill(skill)),
+            *(_agent(agent) for agent in blueprint.of(Kind.AGENTS)),
+            *(_rule(rule) for rule in blueprint.of(Kind.RULES)),
+            *(_hook_script(hook) for hook in hooks),
+        ]
+        if servers:
+            data = {"mcpServers": {s.name: json.loads(json.dumps(s.meta["server"])) for s in servers}}
+            ops.append(FileOp(".mcp.json", Strategy.JSON, data=data))
+        return ops

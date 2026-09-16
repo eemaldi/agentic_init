@@ -5,7 +5,7 @@ import sys
 import pytest
 from conftest import apply, configure
 
-from agentinit.config import Mode
+from agentic_init.config import Mode
 
 
 @pytest.fixture
@@ -39,7 +39,7 @@ def test_dangerous_commands_are_blocked(hooks, command):
     result = run_hook(hooks / "block-dangerous-commands.py", {"tool_input": {"command": command}})
 
     assert result.returncode == 2
-    assert "Blocked by agentinit" in result.stderr
+    assert "Blocked by agentic_init" in result.stderr
 
 
 @pytest.mark.parametrize(

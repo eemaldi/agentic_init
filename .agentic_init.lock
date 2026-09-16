@@ -1,0 +1,176 @@
+{
+  "version": "0.1.0",
+  "files": {
+    ".claude/agents/reviewer.md": {
+      "strategy": "owned",
+      "hash": "67e0f076003dd07b80db4c61ca87eefb4c9213dc2cd24fa5511ec4598d4563e4"
+    },
+    ".claude/hooks/block-dangerous-commands.py": {
+      "strategy": "owned",
+      "hash": "3f36c2d9c7871650af59563bd73d0e016f3aef98f16c2f205010f9e0d28ad5a7"
+    },
+    ".claude/hooks/post-edit-format.py": {
+      "strategy": "owned",
+      "hash": "dbdcd4d22f3e746449401dafc38d3a17e91362af8e9fddfc2a277fdd90bc78aa"
+    },
+    ".claude/hooks/protect-secrets.py": {
+      "strategy": "owned",
+      "hash": "94e25aa7f7d635bfa0400013693c41995efdf5ed74fad55f7451df64182be262"
+    },
+    ".claude/settings.json": {
+      "strategy": "json",
+      "owned": {
+        "$schema": "https://json.schemastore.org/claude-code-settings.json",
+        "permissions": {
+          "allow": [
+            "Bash(git status)",
+            "Bash(git status *)",
+            "Bash(git diff)",
+            "Bash(git diff *)",
+            "Bash(git log)",
+            "Bash(git log *)",
+            "Bash(git show)",
+            "Bash(git show *)",
+            "Bash(git branch)",
+            "Bash(git branch *)",
+            "Bash(git rev-parse)",
+            "Bash(git rev-parse *)",
+            "Bash(uv run pytest)",
+            "Bash(uv run pytest *)",
+            "Bash(uv run ruff check .)",
+            "Bash(uv run ruff check *)",
+            "Bash(uv run ruff format .)",
+            "Bash(uv run ruff format *)",
+            "Bash(git add)",
+            "Bash(git add *)",
+            "Bash(git commit)",
+            "Bash(git commit *)",
+            "Bash(git switch -c)",
+            "Bash(git switch -c *)",
+            "Bash(git checkout -b)",
+            "Bash(git checkout -b *)",
+            "Bash(gh pr create)",
+            "Bash(gh pr create *)",
+            "Bash(gh pr view)",
+            "Bash(gh pr view *)",
+            "Bash(gh pr checks)",
+            "Bash(gh pr checks *)"
+          ],
+          "ask": [
+            "Bash(git reset --hard)",
+            "Bash(git reset --hard *)",
+            "Bash(git clean)",
+            "Bash(git clean *)",
+            "Bash(git rebase)",
+            "Bash(git rebase *)",
+            "Bash(git push)",
+            "Bash(git push *)",
+            "Bash(gh pr merge)",
+            "Bash(gh pr merge *)"
+          ],
+          "deny": [
+            "Bash(rm -rf *)",
+            "Bash(sudo *)",
+            "Bash(git push --force *)",
+            "Bash(git push -f *)",
+            "Read(./.env)",
+            "Edit(./.env)",
+            "Read(./.env.*)",
+            "Edit(./.env.*)",
+            "Read(./**/.env)",
+            "Edit(./**/.env)",
+            "Read(./**/.env.*)",
+            "Edit(./**/.env.*)",
+            "Read(./secrets/**)",
+            "Edit(./secrets/**)",
+            "Read(./**/*.pem)",
+            "Edit(./**/*.pem)",
+            "Read(./**/*.key)",
+            "Edit(./**/*.key)",
+            "Read(./**/credentials.json)",
+            "Edit(./**/credentials.json)"
+          ],
+          "defaultMode": "acceptEdits"
+        },
+        "hooks": {
+          "PreToolUse": [
+            {
+              "matcher": "Bash",
+              "hooks": [
+                {
+                  "type": "command",
+                  "command": "python3 \"$CLAUDE_PROJECT_DIR/.claude/hooks/block-dangerous-commands.py\""
+                }
+              ]
+            },
+            {
+              "matcher": "Read|Edit|Write|MultiEdit|Grep|Bash",
+              "hooks": [
+                {
+                  "type": "command",
+                  "command": "python3 \"$CLAUDE_PROJECT_DIR/.claude/hooks/protect-secrets.py\""
+                }
+              ]
+            }
+          ],
+          "PostToolUse": [
+            {
+              "matcher": "Edit|Write|MultiEdit",
+              "hooks": [
+                {
+                  "type": "command",
+                  "command": "python3 \"$CLAUDE_PROJECT_DIR/.claude/hooks/post-edit-format.py\""
+                }
+              ]
+            }
+          ]
+        }
+      }
+    },
+    ".claude/skills/debug/SKILL.md": {
+      "strategy": "owned",
+      "hash": "5765ae6d5fe505b67faf5b479c92afac3ceb319113a67aa4c168731428db60cf"
+    },
+    ".claude/skills/implement/SKILL.md": {
+      "strategy": "owned",
+      "hash": "7f2edfdc4f51cab0fd99ac8b85f830de4ac63f4a6362a9acc515d26ba42dd8f6"
+    },
+    ".claude/skills/review/SKILL.md": {
+      "strategy": "owned",
+      "hash": "54cd682e501e1461ec137d4f8a5fad80a2c776059a2e3411214e05e46f57699e"
+    },
+    ".claude/skills/test/SKILL.md": {
+      "strategy": "owned",
+      "hash": "b3f7446b278452d8f3099d7d9a6ce13d8f72027ab618433b139189350e43b8c6"
+    },
+    ".gitignore": {
+      "strategy": "blocks",
+      "blocks": [
+        "agent-state"
+      ]
+    },
+    ".mcp.json": {
+      "strategy": "json",
+      "owned": {
+        "mcpServers": {
+          "github": {
+            "type": "http",
+            "url": "https://api.githubcopilot.com/mcp/",
+            "headers": {
+              "Authorization": "Bearer ${GITHUB_PERSONAL_ACCESS_TOKEN}"
+            }
+          }
+        }
+      }
+    },
+    "CLAUDE.md": {
+      "strategy": "blocks",
+      "blocks": [
+        "project",
+        "commands",
+        "workflow",
+        "verification"
+      ]
+    }
+  }
+}

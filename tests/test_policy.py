@@ -1,6 +1,6 @@
-from agentinit.config import Commands, Mode
-from agentinit.policy import build_policy
-from agentinit.presets import default_autonomy
+from agentic_init.config import Commands, Mode
+from agentic_init.policy import build_policy
+from agentic_init.presets import default_autonomy
 
 COMMANDS = Commands(test="make test")
 

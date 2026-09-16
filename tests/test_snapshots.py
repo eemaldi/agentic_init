@@ -4,8 +4,8 @@ from pathlib import Path
 import pytest
 from conftest import configure
 
-from agentinit.config import Mode, Modules
-from agentinit.engine import build
+from agentic_init.config import Mode, Modules
+from agentic_init.engine import build
 
 SNAPSHOTS = Path(__file__).parent / "snapshots"
 CASES = {
