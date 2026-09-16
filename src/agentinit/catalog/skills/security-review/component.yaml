@@ -1,0 +1,1 @@
+description: Adversarial security review of a change or area covering authn/authz, input handling, secrets, dependencies and data exposure. Use for any change touching auth, user input, data access or infrastructure.

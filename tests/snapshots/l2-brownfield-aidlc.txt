@@ -1,0 +1,886 @@
+=== .claude/agents/reviewer.md
+---
+name: reviewer
+description: Independent read-only reviewer for diffs and pull requests. Use proactively after implementing any non-trivial change and before opening or merging a PR.
+tools: Read, Grep, Glob, Bash
+---
+
+## Purpose
+Judge a change independently of whoever wrote it.
+
+## Inputs
+- A diff or PR reference, and the task or story it implements.
+
+## Authority
+Read-only. Never edit files. Bash for `git diff`, `git log` and running existing checks only.
+
+## Procedure
+Follow the `/review` skill. Confirm each finding by reading code or running a check; drop what you cannot confirm.
+
+## Output
+1. Verdict: approve / request changes
+2. Blocking issues: `path:line`, failure scenario, suggested fix
+3. Non-blocking issues
+4. Missing tests
+5. Residual risk
+
+## Escalate
+Security vulnerabilities, data-loss risk or breaking API changes: flag at the top of the output.
+
+=== .claude/agents/security-reviewer.md
+---
+name: security-reviewer
+description: Adversarial read-only security reviewer. Use proactively for changes touching authentication, authorization, user input, secrets, data access, dependencies or infrastructure.
+tools: Read, Grep, Glob, Bash
+---
+
+## Purpose
+Find how the change can be abused or fail unsafely.
+
+## Authority
+Read-only. Never edit files.
+
+## Procedure
+Follow the `/security-review` skill. Assume inputs are hostile and callers are unauthenticated until proven otherwise.
+
+## Output
+Findings table ordered by severity, each with an exploit scenario and a fix. "No findings" must list what was checked.
+
+## Escalate
+Critical or high severity findings: state them first and recommend blocking the merge.
+
+=== .claude/agents/test-engineer.md
+---
+name: test-engineer
+description: Writes and repairs tests, closes coverage gaps and diagnoses flaky or failing suites. Use when a change lacks tests or a test run fails for unclear reasons.
+tools: Read, Grep, Glob, Edit, Write, Bash
+---
+
+## Purpose
+Make the test suite prove the system's behavior.
+
+## Authority
+May create and edit test files, fixtures and test helpers. Must not change production code; report production defects instead.
+
+## Procedure
+Follow the `/test` skill. For failing suites, follow `/debug` and determine whether the test or the code is wrong before touching either.
+
+## Output
+- Tests added/changed and the behavior each proves
+- Commands run and results
+- Production defects found (not fixed)
+- Remaining gaps
+
+=== .claude/hooks/block-dangerous-commands.py (executable)
+#!/usr/bin/env python3
+import json
+import re
+import sys
+
+DANGEROUS = [
+    (r"\brm\s+(-\w+\s+)*-\w*[rR]\w*\s+(-\w+\s+)*(/|~|\$HOME|\*|\.{1,2})/?(\s|$)", "recursive delete of a root, home, parent or wildcard path"),
+    (r"\bgit\s+push\b.*\s(--force(?!-with-lease)|-f)(\s|$)", "force push; use --force-with-lease on your own branch if truly needed"),
+    (r"\bgit\s+push\b.*\s\+\S+", "force push via refspec"),
+    (r"(?i)\b(drop|truncate)\s+(table|database|schema)\b", "destructive SQL"),
+    (r"\b(curl|wget)\b[^|;&]*\|\s*(sudo\s+)?(ba|z|da)?sh\b", "piping a remote script into a shell"),
+    (r"\bmkfs(\.\w+)?\b|\bdd\b.*\bof=/dev/", "writing to a raw device"),
+    (r"\bchmod\s+(-R\s+)?0?777\b", "world-writable permissions"),
+    (r"\bterraform\s+(apply|destroy)\b|\bkubectl\s+(delete|apply)\b|\bhelm\s+(uninstall|upgrade|install)\b", "infrastructure mutation outside the release workflow"),
+]
+
+
+def main() -> int:
+    command = json.load(sys.stdin).get("tool_input", {}).get("command", "")
+    for pattern, reason in DANGEROUS:
+        if re.search(pattern, command):
+            print(f"Blocked by agentinit: {reason}. If this is required, ask the human to run it.", file=sys.stderr)
+            return 2
+    return 0
+
+
+if __name__ == "__main__":
+    sys.exit(main())
+
+=== .claude/hooks/post-edit-format.py (executable)
+#!/usr/bin/env python3
+import json
+import os
+import shutil
+import subprocess
+import sys
+from pathlib import Path
+
+ROOT = Path(os.environ.get("CLAUDE_PROJECT_DIR", "."))
+WEB = (".js", ".jsx", ".ts", ".tsx", ".mjs", ".cjs", ".css", ".scss", ".vue", ".svelte")
+FORMATTERS = {
+    (".py",): [["ruff", "format", "--quiet"], ["black", "--quiet"]],
+    WEB: [["prettier", "--write", "--log-level", "warn"], ["biome", "format", "--write"]],
+    (".go",): [["gofmt", "-w"]],
+    (".rs",): [["rustfmt"]],
+}
+LOCAL_BINS = (ROOT / "node_modules" / ".bin", ROOT / ".venv" / "bin")
+
+
+def locate(tool: str) -> str | None:
+    local = next((str(d / tool) for d in LOCAL_BINS if (d / tool).exists()), None)
+    return local or shutil.which(tool)
+
+
+def main() -> int:
+    path = json.load(sys.stdin).get("tool_input", {}).get("file_path", "")
+    if not path or not Path(path).is_file():
+        return 0
+    for extensions, candidates in FORMATTERS.items():
+        if not path.endswith(extensions):
+            continue
+        for tool, *args in candidates:
+            if executable := locate(tool):
+                subprocess.run([executable, *args, path], cwd=ROOT, capture_output=True, timeout=60)
+                return 0
+    return 0
+
+
+if __name__ == "__main__":
+    sys.exit(main())
+
+=== .claude/hooks/protect-secrets.py (executable)
+#!/usr/bin/env python3
+import fnmatch
+import json
+import os
+import re
+import sys
+from pathlib import Path
+
+SECRET = re.compile(
+    r"(^|/)(\.env(\.[\w.-]+)?|[^/]*\.(pem|key|p12|pfx|keystore)|id_(rsa|ecdsa|ed25519)"
+    r"|\.aws/credentials|\.netrc|\.pgpass|credentials\.json|service-account[^/]*\.json)$|^(\./)?secrets?/."
+)
+TEMPLATE = re.compile(r"\.env\.(example|sample|template|dist)$")
+SAMPLE_SECRETS = (".env", ".env.local", "id_rsa", "server.pem", "server.key", "credentials.json", "secrets/token")
+ROOT = Path(os.environ.get("CLAUDE_PROJECT_DIR", ".")).resolve()
+MESSAGE_ARGUMENT = re.compile(r"""(-m|--message|--title|--body)(\s+|=)('[^']*'|"[^"$`]*")""")
+LITERAL_HEREDOC = re.compile(r"""<<-?\s*(['"])(\w+)\1[^\n]*\n.*?\n\s*\2(?=\s|$)""", re.S)
+SEGMENT_SEPARATORS = re.compile(r"\|\|?|&&?|;|\n|\$\(|<\(|>\(|`|\(|\)")
+FILTER_ARGUMENT = re.compile(r"(^|\s)(--include|--exclude|--exclude-dir|--glob|-g|-i?name|-i?path)(\s+|=)\S*[*?\[]\S*")
+WORD = re.compile(r"[^\s<>=,:\[\]{}]+")
+REDIRECT_TARGET = re.compile(r">>?\s*([^\s]+)")
+PRINTERS = {"echo", "printf"}
+
+
+def relative(path: str) -> str:
+    candidate = Path(path)
+    if candidate.is_absolute() and candidate.resolve().is_relative_to(ROOT):
+        return candidate.resolve().relative_to(ROOT).as_posix()
+    return path
+
+
+def is_secret(path: str) -> bool:
+    path = relative(path)
+    if any(glob in path for glob in "*?["):
+        patterns = {path.removeprefix("./"), Path(path).name}
+        return any(fnmatch.fnmatch(sample, pattern) for sample in SAMPLE_SECRETS for pattern in patterns)
+    return bool(SECRET.search(path)) and not TEMPLATE.search(path)
+
+
+def shell_targets(command: str) -> list[str]:
+    command = LITERAL_HEREDOC.sub("", MESSAGE_ARGUMENT.sub("", command))
+    command = FILTER_ARGUMENT.sub(" ", re.sub(r"""['"\\]""", "", command))
+    targets = []
+    for segment in SEGMENT_SEPARATORS.split(command):
+        words = WORD.findall(segment)
+        if words and words[0] in PRINTERS and REDIRECT_TARGET.search(segment):
+            targets += REDIRECT_TARGET.findall(segment)
+        else:
+            targets += words
+    return targets
+
+
+def main() -> int:
+    payload = json.load(sys.stdin)
+    tool_input = payload.get("tool_input", {})
+    if payload.get("tool_name") == "Bash":
+        candidates = shell_targets(tool_input.get("command", ""))
+    else:
+        candidates = [tool_input.get("file_path", ""), tool_input.get("path", "")]
+    blocked = [path for path in candidates if path and is_secret(path)]
+    if blocked:
+        print(f"Blocked by agentinit: {blocked[0]} is a secret file. Ask the human for the specific non-secret value you need.", file=sys.stderr)
+        return 2
+    return 0
+
+
+if __name__ == "__main__":
+    sys.exit(main())
+
+=== .claude/hooks/verify-completion.py (executable)
+#!/usr/bin/env python3
+import hashlib
+import json
+import os
+import subprocess
+import sys
+import time
+from datetime import datetime, timezone
+from pathlib import Path
+
+CHECKS = [["lint", "uv run ruff check ."], ["typecheck", "uv run mypy ."], ["test", "uv run pytest"]]
+ROOT = Path(os.environ.get("CLAUDE_PROJECT_DIR", "."))
+STATE = ROOT / ".claude" / "state" / "verification.json"
+TIMEOUT_SECONDS = 900
+MAX_CONSECUTIVE_BLOCKS = 3
+OUTPUT_TAIL = 3000
+
+
+def git(*args: str) -> str:
+    result = subprocess.run(["git", *args], cwd=ROOT, capture_output=True, text=True)
+    return result.stdout if result.returncode == 0 else ""
+
+
+def fingerprint() -> str | None:
+    if not git("rev-parse", "--is-inside-work-tree").strip():
+        return None
+    head = git("rev-parse", "HEAD")
+    tracked = git("diff", "HEAD") if head else git("ls-files", "--stage") + git("diff")
+    untracked = git("ls-files", "--others", "--exclude-standard").splitlines()
+    stats = "".join(f"{p}:{(ROOT / p).stat().st_mtime_ns}" for p in untracked if (ROOT / p).is_file())
+    return hashlib.sha256((head + tracked + stats).encode()).hexdigest()
+
+
+def run(name: str, command: str) -> dict:
+    started = time.monotonic()
+    try:
+        result = subprocess.run(command, shell=True, cwd=ROOT, capture_output=True, text=True, timeout=TIMEOUT_SECONDS)
+        code, output = result.returncode, result.stdout + result.stderr
+    except subprocess.TimeoutExpired:
+        code, output = 124, f"timed out after {TIMEOUT_SECONDS}s"
+    return {
+        "check": name,
+        "command": command,
+        "exit_code": code,
+        "seconds": round(time.monotonic() - started, 1),
+        "output_tail": output[-OUTPUT_TAIL:],
+    }
+
+
+def main() -> int:
+    payload = json.load(sys.stdin)
+    current = fingerprint()
+    if not CHECKS or current is None:
+        return 0
+    state = json.loads(STATE.read_text()) if STATE.exists() else {}
+    if state.get("fingerprint") == current and state.get("passed"):
+        return 0
+    blocks = state.get("consecutive_blocks", 0)
+    if payload.get("stop_hook_active") and blocks >= MAX_CONSECUTIVE_BLOCKS:
+        print(json.dumps({"systemMessage": "agentinit: checks still failing after repeated attempts; human attention needed."}))
+        return 0
+
+    results = [run(name, command) for name, command in CHECKS]
+    passed = all(r["exit_code"] == 0 for r in results)
+    STATE.parent.mkdir(parents=True, exist_ok=True)
+    STATE.write_text(json.dumps({
+        "fingerprint": current,
+        "passed": passed,
+        "checked_at": datetime.now(timezone.utc).isoformat(timespec="seconds"),
+        "consecutive_blocks": 0 if passed else blocks + 1,
+        "results": results,
+    }, indent=2))
+    if passed:
+        return 0
+
+    failures = "\n\n".join(
+        f"$ {r['command']} (exit {r['exit_code']})\n{r['output_tail']}" for r in results if r["exit_code"]
+    )
+    print(json.dumps({"decision": "block", "reason": f"Verification failed. Fix before finishing:\n\n{failures}"}))
+    return 0
+
+
+if __name__ == "__main__":
+    sys.exit(main())
+
+=== .claude/rules/architecture.md
+# Architecture rules
+
+- Follow existing module boundaries; do not import across them in new directions without an ADR.
+- Keep domain logic independent of frameworks, transport and persistence.
+- Prefer extending an existing abstraction over creating a parallel one.
+- Do not introduce new dependencies, services or datastores without checking for existing equivalents and asking.
+- Generated files are never edited by hand; change the generator.
+- Record significant decisions as ADRs in `docs/decisions/`.
+
+=== .claude/rules/security.md
+# Security rules
+
+- Never read, print, log or commit secrets. Configuration comes from the environment.
+- Validate and bound all external input at the boundary.
+- Use parameterized queries and argument arrays; never build SQL or shell commands by string concatenation.
+- Enforce authorization server-side on every request, per resource.
+- Do not disable TLS verification, CSRF protection or security headers.
+- Changes to auth, crypto, permissions or payment flows require human approval.
+
+=== .claude/rules/testing.md
+---
+paths:
+- '**/*test*'
+- '**/*spec*'
+- '**/tests/**'
+- '**/__tests__/**'
+---
+
+# Testing rules
+
+- Every behavior change comes with a test that fails without it.
+- Test through public interfaces; mock only at system boundaries (network, clock, filesystem, third-party APIs).
+- One behavior per test; name tests after the behavior, not the method.
+- No sleeps or real network calls in unit tests. Flaky tests are bugs.
+- Never weaken or delete an assertion to make a test pass without explaining why in the report.
+
+=== .claude/settings.json
+{
+  "$schema": "https://json.schemastore.org/claude-code-settings.json",
+  "permissions": {
+    "allow": [
+      "Bash(git status)",
+      "Bash(git status *)",
+      "Bash(git diff)",
+      "Bash(git diff *)",
+      "Bash(git log)",
+      "Bash(git log *)",
+      "Bash(git show)",
+      "Bash(git show *)",
+      "Bash(git branch)",
+      "Bash(git branch *)",
+      "Bash(git rev-parse)",
+      "Bash(git rev-parse *)",
+      "Bash(uv run pytest)",
+      "Bash(uv run pytest *)",
+      "Bash(uv run ruff check .)",
+      "Bash(uv run ruff check *)",
+      "Bash(uv run mypy .)",
+      "Bash(uv run mypy *)",
+      "Bash(uv run ruff format .)",
+      "Bash(uv run ruff format *)"
+    ],
+    "ask": [
+      "Bash(git reset --hard)",
+      "Bash(git reset --hard *)",
+      "Bash(git clean)",
+      "Bash(git clean *)",
+      "Bash(git rebase)",
+      "Bash(git rebase *)",
+      "Bash(git push)",
+      "Bash(git push *)",
+      "Bash(gh pr merge)",
+      "Bash(gh pr merge *)"
+    ],
+    "deny": [
+      "Bash(rm -rf *)",
+      "Bash(sudo *)",
+      "Bash(git push --force *)",
+      "Bash(git push -f *)",
+      "Read(./.env)",
+      "Edit(./.env)",
+      "Read(./.env.*)",
+      "Edit(./.env.*)",
+      "Read(./**/.env)",
+      "Edit(./**/.env)",
+      "Read(./**/.env.*)",
+      "Edit(./**/.env.*)",
+      "Read(./secrets/**)",
+      "Edit(./secrets/**)",
+      "Read(./**/*.pem)",
+      "Edit(./**/*.pem)",
+      "Read(./**/*.key)",
+      "Edit(./**/*.key)",
+      "Read(./**/credentials.json)",
+      "Edit(./**/credentials.json)"
+    ],
+    "defaultMode": "acceptEdits"
+  },
+  "sandbox": {
+    "enabled": true,
+    "autoAllowBashIfSandboxed": false,
+    "filesystem": {
+      "denyRead": [
+        "./.env",
+        "./.env.*",
+        "./**/.env",
+        "./**/.env.*",
+        "./secrets",
+        "./**/*.pem",
+        "./**/*.key",
+        "./**/credentials.json"
+      ]
+    }
+  },
+  "hooks": {
+    "PreToolUse": [
+      {
+        "matcher": "Bash",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "python3 \"$CLAUDE_PROJECT_DIR/.claude/hooks/block-dangerous-commands.py\""
+          }
+        ]
+      },
+      {
+        "matcher": "Read|Edit|Write|MultiEdit|Grep|Bash",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "python3 \"$CLAUDE_PROJECT_DIR/.claude/hooks/protect-secrets.py\""
+          }
+        ]
+      }
+    ],
+    "PostToolUse": [
+      {
+        "matcher": "Edit|Write|MultiEdit",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "python3 \"$CLAUDE_PROJECT_DIR/.claude/hooks/post-edit-format.py\""
+          }
+        ]
+      }
+    ],
+    "Stop": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "python3 \"$CLAUDE_PROJECT_DIR/.claude/hooks/verify-completion.py\""
+          }
+        ]
+      }
+    ]
+  }
+}
+
+=== .claude/skills/brownfield-change/SKILL.md
+---
+name: brownfield-change
+description: Safely change behavior in existing code by establishing invariants, blast radius and test coverage before editing. Use for any modification of established production code.
+---
+
+# Brownfield change
+
+## Before editing
+1. Locate the affected subsystem in `docs/brownfield/system-map.md`. Missing: run `/discover` for it first.
+2. List invariants and critical paths the change touches (`docs/brownfield/invariants.md`, `critical-paths.md`).
+3. Find the tests that exercise the code. None: write characterization tests that pin current behavior.
+4. Identify external dependents: APIs, persisted data, events, other services, scheduled jobs.
+5. Identify backward-compatibility constraints.
+6. Write the blast radius: what could break, how you would notice, how to roll back.
+7. Blast radius crosses a critical path or invariant: stop and get human approval.
+
+## Editing
+- Change behavior in small, separately verifiable steps.
+- Keep old and new paths side by side (flag, adapter) when the change is not trivially reversible.
+
+## After
+- Run characterization and targeted tests, then the suite.
+- Update `docs/brownfield/` with anything learned.
+
+=== .claude/skills/debug/SKILL.md
+---
+name: debug
+description: Investigate a bug or failing test systematically from reproduction to root cause and regression test. Use when behavior is wrong or a check fails.
+---
+
+# Debug
+
+## Procedure
+1. Reproduce. Capture the exact command, input and output. Cannot reproduce: gather logs and stop to ask.
+2. Write a failing test that reproduces the bug.
+3. Form hypotheses ranked by likelihood. For each, name the observation that would confirm or refute it.
+4. Test the cheapest hypothesis first: read code paths, add temporary logging, bisect with `git log`/`git bisect`.
+5. Identify the root cause, not the first symptom. Ask "why" until the answer is a code or data defect.
+6. Fix the root cause with the smallest change. Remove temporary logging.
+7. Confirm the failing test now passes and the suite is green (`uv run pytest`).
+8. Search for the same defect pattern elsewhere.
+
+## Report
+- Root cause (one paragraph)
+- Fix and regression test
+- Other places with the same pattern
+- What would have caught this earlier (rule, hook, test), as a follow-up
+
+=== .claude/skills/discover/SKILL.md
+---
+name: discover
+description: Map an unfamiliar codebase or subsystem into durable architecture notes before changing it. Use at the start of work in an area without documentation.
+---
+
+# Discover
+
+## Procedure
+1. Read the entry points: manifests, main modules, routing, CLI or job definitions.
+2. Identify components and their boundaries, data stores, external integrations, and deployment units.
+3. Trace one representative request or job end to end.
+4. Map tests: where they live, what they cover, how to run them, notable gaps.
+5. Record invariants: rules the code relies on that are not enforced by types or tests.
+6. Record hotspots: complex, frequently changed or fragile areas.
+7. Write findings to `docs/brownfield/` (system-map, critical-paths, invariants, hotspots, test-gaps). Update, never duplicate.
+
+State uncertainty explicitly: mark unverified claims with `(unverified)`.
+
+=== .claude/skills/evidence-gate/SKILL.md
+---
+name: evidence-gate
+description: Verify a story or task is actually complete by collecting objective evidence for every acceptance criterion. Use before declaring any story done.
+---
+
+# Evidence gate
+
+A task is done when evidence says so, not when the implementation looks finished.
+
+## Procedure
+1. Load the acceptance criteria from `docs/stories/`.
+2. Map each criterion to objective evidence:
+   | Claim | Evidence |
+   |---|---|
+   | Builds | successful build output |
+   | Behavior implemented | passing acceptance or integration test |
+   | UI works | e2e/browser test or screenshot |
+   | Migration works | migration run against a fresh database |
+   | No regressions | full test suite |
+   | Secure | security review with no open blocking findings |
+3. Produce missing evidence by running the checks. Never infer evidence from reading code.
+4. Read `.claude/state/verification.json` for the latest automated check results.
+5. Write `docs/evidence/<story-slug>.md` using `docs/evidence/_template.md`.
+6. Any criterion without evidence: the task is **not done**. Report the gap instead.
+
+=== .claude/skills/implement/SKILL.md
+---
+name: implement
+description: Implement a well-defined change from acceptance criteria through tests and verified evidence. Use for any feature or fix with clear requirements.
+---
+
+# Implement
+
+## Inputs
+- The task, story or issue with acceptance criteria. Missing criteria: write them down and confirm before coding.
+
+## Procedure
+1. Read the acceptance criteria and restate them as a checklist.
+2. Locate the affected code, its callers and its tests. Reuse existing utilities before writing new ones.
+3. List the files you expect to change. More than expected mid-task: stop and re-plan.
+4. Write or update a failing test that captures the requirement.
+5. Implement the smallest coherent change that makes it pass.
+6. Run targeted tests: `uv run pytest path/to/test_file.py::test_name`.
+7. Run `uv run ruff check .`, `uv run mypy .`, `uv run pytest`.
+8. Review the full diff. Remove debug output, dead code and unrelated edits.
+9. Delegate review to the `reviewer` agent; resolve blocking findings.
+
+## Never
+- Add a dependency without checking for an existing equivalent.
+- Change public APIs, schemas or configuration beyond the task scope without asking.
+- Declare done without running the checks above.
+
+## Report
+- Changes (files and why)
+- Evidence: commands run and their results
+- Unresolved risks and follow-ups
+
+=== .claude/skills/review/SKILL.md
+---
+name: review
+description: Review a diff or pull request for correctness, design, security and test gaps, producing prioritized findings. Use before merging any non-trivial change.
+---
+
+# Review
+
+## Inputs
+- A diff: `git diff <base>...HEAD`, a PR number, or staged changes.
+
+## Procedure
+1. Read the intent (story, PR description, commit messages) before the code.
+2. Read the full diff, then the surrounding code of every changed function.
+3. Check:
+   - Correctness: logic, edge cases, error handling, null/empty input
+   - Compatibility: public APIs, persisted data, configuration, migrations
+   - Concurrency and partial failure
+   - Security: input validation, authz, secrets, injection
+   - Tests: does a test fail if the change is reverted?
+   - Simplicity: duplication, dead code, unnecessary abstraction
+4. For each suspected issue, confirm it by reading code or running a check. Drop what you cannot confirm.
+
+## Output
+1. Blocking issues (with file:line and a concrete failure scenario)
+2. Non-blocking improvements
+3. Missing tests
+4. Residual risk
+
+Do not edit files while reviewing.
+
+=== .claude/skills/security-review/SKILL.md
+---
+name: security-review
+description: Adversarial security review of a change or area covering authn/authz, input handling, secrets, dependencies and data exposure. Use for any change touching auth, user input, data access or infrastructure.
+---
+
+# Security review
+
+## Procedure
+1. Map the attack surface of the change: entry points, trust boundaries, data stores, external calls.
+2. For each entry point, ask:
+   - Who can reach this, and is that verified server-side?
+   - What happens with malformed, oversized or malicious input?
+   - Can this leak data across tenants or users?
+   - Are secrets read, logged or returned?
+   - Is there injection risk (SQL, shell, template, path, SSRF, deserialization)?
+3. Check new or updated dependencies for known vulnerabilities and maintenance status.
+4. Confirm findings with a concrete exploit scenario or a failing test. Drop speculation.
+
+## Output
+| Severity | Location | Issue | Exploit scenario | Fix |
+|---|---|---|---|---|
+
+Read-only: never modify code during the review. Escalate critical findings to the human immediately.
+
+=== .claude/skills/spec/SKILL.md
+---
+name: spec
+description: Turn an idea or request into a story with context, constraints, acceptance criteria and verification plan. Use before implementing anything ambiguous.
+---
+
+# Spec
+
+## Procedure
+1. Restate the intent in one sentence: who needs what, and why.
+2. Research the relevant code and docs. List what exists and what must change.
+3. Surface ambiguities as explicit questions. Ask them; do not assume business rules.
+4. Write the story using the template below in `docs/stories/<slug>.md`.
+5. Every acceptance criterion must be verifiable by a test or a command.
+
+## Template
+```md
+# <Title>
+
+## Goal
+## Context
+## Constraints
+## Acceptance criteria
+- [ ] ...
+## Verification
+## Authority
+- May modify: ...
+- Must not modify: ...
+## Out of scope
+```
+
+=== .claude/skills/test/SKILL.md
+---
+name: test
+description: Design and run tests for a change, filling coverage gaps for behavior, edge cases and failure modes. Use when adding tests or when verification is missing.
+---
+
+# Test
+
+## Procedure
+1. Identify the behavior under test and its contract (inputs, outputs, side effects, errors).
+2. Find the existing test style, fixtures and helpers; follow them.
+3. Cover, in order: the happy path, boundaries, invalid input, failure of dependencies, concurrency or ordering where relevant.
+4. Test behavior through public interfaces, not implementation details. Mock only at system boundaries.
+5. Run the new tests and confirm they fail without the change (or would have caught the bug).
+6. Run the suite: `uv run pytest`.
+
+## Report
+- Tests added or changed, and what behavior each proves
+- Commands run with pass/fail counts
+- Remaining untested risk
+
+=== .gitignore
+# agentinit:begin agent-state
+.claude/settings.local.json
+.claude/state/
+# agentinit:end agent-state
+
+=== .mcp.json
+{
+  "mcpServers": {
+    "github": {
+      "type": "http",
+      "url": "https://api.githubcopilot.com/mcp/",
+      "headers": {
+        "Authorization": "Bearer ${GITHUB_PERSONAL_ACCESS_TOKEN}"
+      }
+    }
+  }
+}
+
+=== CLAUDE.md
+<!-- agentinit:begin project -->
+# shop
+
+## Stack
+- Languages: python
+- Frameworks: FastAPI
+- Package managers: uv
+<!-- agentinit:end project -->
+
+<!-- agentinit:begin commands -->
+## Commands
+
+- Install: `uv sync`
+- Test (all): `uv run pytest`
+- Test (single): `uv run pytest path/to/test_file.py::test_name`
+- Lint: `uv run ruff check .`
+- Format: `uv run ruff format .`
+- Typecheck: `uv run mypy .`
+
+Use these commands instead of guessing. If a command you need is missing, ask, then record it here.
+<!-- agentinit:end commands -->
+
+<!-- agentinit:begin workflow -->
+## Working agreement
+
+Autonomy: **A2 (Delegated implementation)**
+- Research, plan, implement and test on your own. Do not commit, push or open PRs unless asked.
+- Drop to A1 for production infrastructure.
+- Escalate instead of deciding: conflicting requirements, unclear architecture or business rules, destructive or irreversible actions, security trade-offs, production incidents.
+- Skills: `/implement`, `/test`, `/review`, `/debug`, `/spec`, `/security-review`, `/discover`, `/brownfield-change`, `/evidence-gate`. Use the matching skill instead of improvising a procedure.
+- Agents: `reviewer`, `test-engineer`, `security-reviewer`. The agent that writes a change never approves it; delegate review to a read-only agent.
+
+### Existing codebase
+Understand before improving. Read `docs/brownfield/` first and follow `/brownfield-change` for any behavior change. Prefer small, reversible changes.
+
+### Learning loop
+When a mistake repeats, fix the system, not just the instance: update this file, a rule, a skill, a hook or a test.
+<!-- agentinit:end workflow -->
+
+<!-- agentinit:begin verification -->
+## Definition of done
+
+1. Run targeted tests, then the suite: `uv run pytest`.
+2. Run static checks: `uv run ruff check .`, `uv run mypy .`.
+3. Review your own diff (`git diff`) for scope creep and leftovers.
+4. Report: what changed, evidence (commands run and results), residual risk, follow-ups.
+
+A Stop hook re-runs lint, typecheck and tests on any unverified commit or change and blocks completion while they fail.
+
+Work is complete only with evidence: run `/evidence-gate` before declaring a story done.
+
+Bash runs in an OS sandbox that cannot read protected paths. If a command fails inside it, ask the human before running it unsandboxed; never work around it.
+<!-- agentinit:end verification -->
+
+<!-- agentinit:begin context -->
+## Where to look
+
+- `.claude/rules/`: architecture, testing, security rules, loaded when relevant.
+- `docs/architecture/`: system overview, boundaries, data flow.
+- `docs/decisions/`: ADRs. Record every significant architectural decision.
+- `docs/stories/`: specs with acceptance criteria.
+- `docs/operations/`: runbooks.
+- `docs/brownfield/`: system map, critical paths, invariants, hotspots, test gaps.
+- `docs/evidence/`: verification evidence per story.
+
+Keep this file short and stable. Procedures belong in skills, details in docs.
+<!-- agentinit:end context -->
+
+=== docs/architecture/system-overview.md
+# System overview
+
+## Purpose
+
+## Components
+| Component | Responsibility | Owns data | Depends on |
+|---|---|---|---|
+
+## Data flow
+
+## External integrations
+
+## Deployment
+
+=== docs/brownfield/critical-paths.md
+# Critical paths
+
+<!-- Filled by /discover or `agentinit enrich`. Mark unverified claims with (unverified). -->
+
+=== docs/brownfield/hotspots.md
+# Hotspots
+
+<!-- Filled by /discover or `agentinit enrich`. Mark unverified claims with (unverified). -->
+
+=== docs/brownfield/invariants.md
+# Invariants
+
+<!-- Filled by /discover or `agentinit enrich`. Mark unverified claims with (unverified). -->
+
+=== docs/brownfield/system-map.md
+# System map
+
+<!-- Filled by /discover or `agentinit enrich`. Mark unverified claims with (unverified). -->
+
+=== docs/brownfield/test-gaps.md
+# Test gaps
+
+<!-- Filled by /discover or `agentinit enrich`. Mark unverified claims with (unverified). -->
+
+=== docs/decisions/0000-template.md
+# NNNN: Title
+
+- Status: proposed | accepted | superseded by NNNN
+- Date: YYYY-MM-DD
+
+## Context
+
+## Options
+
+## Decision
+
+## Consequences
+
+=== docs/evidence/_template.md
+# Evidence: story title
+
+- Story:
+- Commit:
+- Date:
+
+| Acceptance criterion | Evidence | Result |
+|---|---|---|
+
+## Commands run
+
+## Residual risk
+
+=== docs/operations/runbook.md
+# Runbook
+
+## Start locally
+
+## Deploy
+
+## Roll back
+
+## Logs and metrics
+
+## Common incidents
+| Symptom | Likely cause | Action |
+|---|---|---|
+
+=== docs/stories/_template.md
+# Title
+
+## Goal
+
+## Context
+
+## Constraints
+
+## Acceptance criteria
+- [ ]
+
+## Verification
+
+## Authority
+- May modify:
+- Must not modify:
+
+## Out of scope
+

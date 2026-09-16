@@ -1,0 +1,3 @@
+description: Blocks reading or editing secret files (.env, keys, credentials) through file tools and any shell command that names them.
+event: PreToolUse
+matcher: Read|Edit|Write|MultiEdit|Grep|Bash

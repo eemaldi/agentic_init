@@ -1,0 +1,2 @@
+description: Writes and repairs tests, closes coverage gaps and diagnoses flaky or failing suites. Use when a change lacks tests or a test run fails for unclear reasons.
+tools: [Read, Grep, Glob, Edit, Write, Bash]

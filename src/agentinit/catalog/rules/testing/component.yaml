@@ -1,0 +1,2 @@
+description: How tests are written and organized.
+paths: ["**/*test*", "**/*spec*", "**/tests/**", "**/__tests__/**"]

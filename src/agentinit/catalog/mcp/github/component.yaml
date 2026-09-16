@@ -1,0 +1,7 @@
+description: GitHub repositories, issues, pull requests and Actions via the official remote MCP server.
+env: [GITHUB_PERSONAL_ACCESS_TOKEN]
+server:
+  type: http
+  url: https://api.githubcopilot.com/mcp/
+  headers:
+    Authorization: "Bearer ${GITHUB_PERSONAL_ACCESS_TOKEN}"

@@ -1,0 +1,129 @@
+=== .claude/settings.json
+{
+  "$schema": "https://json.schemastore.org/claude-code-settings.json",
+  "permissions": {
+    "allow": [
+      "Bash(git status)",
+      "Bash(git status *)",
+      "Bash(git diff)",
+      "Bash(git diff *)",
+      "Bash(git log)",
+      "Bash(git log *)",
+      "Bash(git show)",
+      "Bash(git show *)",
+      "Bash(git branch)",
+      "Bash(git branch *)",
+      "Bash(git rev-parse)",
+      "Bash(git rev-parse *)",
+      "Bash(uv run pytest)",
+      "Bash(uv run pytest *)",
+      "Bash(uv run ruff check .)",
+      "Bash(uv run ruff check *)",
+      "Bash(uv run mypy .)",
+      "Bash(uv run mypy *)",
+      "Bash(uv run ruff format .)",
+      "Bash(uv run ruff format *)",
+      "Bash(git add)",
+      "Bash(git add *)",
+      "Bash(git commit)",
+      "Bash(git commit *)",
+      "Bash(git switch -c)",
+      "Bash(git switch -c *)",
+      "Bash(git checkout -b)",
+      "Bash(git checkout -b *)",
+      "Bash(gh pr create)",
+      "Bash(gh pr create *)",
+      "Bash(gh pr view)",
+      "Bash(gh pr view *)",
+      "Bash(gh pr checks)",
+      "Bash(gh pr checks *)",
+      "Bash(git push)",
+      "Bash(git push *)",
+      "Bash(gh pr merge)",
+      "Bash(gh pr merge *)"
+    ],
+    "ask": [
+      "Bash(git reset --hard)",
+      "Bash(git reset --hard *)",
+      "Bash(git clean)",
+      "Bash(git clean *)",
+      "Bash(git rebase)",
+      "Bash(git rebase *)"
+    ],
+    "deny": [
+      "Bash(rm -rf *)",
+      "Bash(sudo *)",
+      "Bash(git push --force *)",
+      "Bash(git push -f *)",
+      "Read(./.env)",
+      "Edit(./.env)",
+      "Read(./.env.*)",
+      "Edit(./.env.*)",
+      "Read(./**/.env)",
+      "Edit(./**/.env)",
+      "Read(./**/.env.*)",
+      "Edit(./**/.env.*)",
+      "Read(./secrets/**)",
+      "Edit(./secrets/**)",
+      "Read(./**/*.pem)",
+      "Edit(./**/*.pem)",
+      "Read(./**/*.key)",
+      "Edit(./**/*.key)",
+      "Read(./**/credentials.json)",
+      "Edit(./**/credentials.json)"
+    ],
+    "defaultMode": "acceptEdits"
+  }
+}
+
+=== .gitignore
+# agentinit:begin agent-state
+.claude/settings.local.json
+.claude/state/
+# agentinit:end agent-state
+
+=== CLAUDE.md
+<!-- agentinit:begin project -->
+# shop
+
+## Stack
+- Languages: python
+- Frameworks: FastAPI
+- Package managers: uv
+<!-- agentinit:end project -->
+
+<!-- agentinit:begin commands -->
+## Commands
+
+- Install: `uv sync`
+- Test (all): `uv run pytest`
+- Test (single): `uv run pytest path/to/test_file.py::test_name`
+- Lint: `uv run ruff check .`
+- Format: `uv run ruff format .`
+- Typecheck: `uv run mypy .`
+
+Use these commands instead of guessing. If a command you need is missing, ask, then record it here.
+<!-- agentinit:end commands -->
+
+<!-- agentinit:begin workflow -->
+## Working agreement
+
+Autonomy: **A4 (Autonomous integration)**
+- Merge low-risk changes once CI and review pass. Never deploy.
+- Drop to A2 for schema migrations, auth, security and payment logic.
+- Drop to A1 for production infrastructure.
+- Escalate instead of deciding: conflicting requirements, unclear architecture or business rules, destructive or irreversible actions, security trade-offs, production incidents.
+
+### Learning loop
+When a mistake repeats, fix the system, not just the instance: update this file, a rule, a skill, a hook or a test.
+<!-- agentinit:end workflow -->
+
+<!-- agentinit:begin verification -->
+## Definition of done
+
+1. Run targeted tests, then the suite: `uv run pytest`.
+2. Run static checks: `uv run ruff check .`, `uv run mypy .`.
+3. Review your own diff (`git diff`) for scope creep and leftovers.
+4. Report: what changed, evidence (commands run and results), residual risk, follow-ups.
+<!-- agentinit:end verification -->
+

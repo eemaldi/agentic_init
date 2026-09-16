@@ -1,0 +1,2 @@
+description: Prepare a release with changelog, version bump, verification and tagging. Invoke explicitly only.
+user_only: true

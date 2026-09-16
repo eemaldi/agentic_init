@@ -1,0 +1,11 @@
+.venv/
+__pycache__/
+dist/
+*.egg-info/
+.pytest_cache/
+.ruff_cache/
+
+# agentinit:begin agent-state
+.claude/settings.local.json
+.claude/state/
+# agentinit:end agent-state

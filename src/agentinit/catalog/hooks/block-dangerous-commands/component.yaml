@@ -1,0 +1,3 @@
+description: Blocks destructive shell commands (recursive deletes, force pushes, destructive SQL, infra mutation, remote script execution).
+event: PreToolUse
+matcher: Bash

@@ -1,0 +1,2 @@
+description: Appends every tool call Claude makes to an audit log in .claude/state/audit.jsonl for review and compliance.
+event: PostToolUse

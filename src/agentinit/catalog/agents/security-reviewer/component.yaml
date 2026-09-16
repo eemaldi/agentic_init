@@ -1,0 +1,2 @@
+description: Adversarial read-only security reviewer. Use proactively for changes touching authentication, authorization, user input, secrets, data access, dependencies or infrastructure.
+tools: [Read, Grep, Glob, Bash]

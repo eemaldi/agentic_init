@@ -1,0 +1,3 @@
+description: Evaluates designs and cross-module changes for boundaries, coupling, operability and reversibility, and drafts ADRs. Use before significant structural changes or new components.
+tools: [Read, Grep, Glob, Bash]
+model: opus

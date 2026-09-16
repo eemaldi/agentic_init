@@ -1,0 +1,2 @@
+description: On Stop, re-runs lint, typecheck and tests when the current commit or working tree is unverified, blocks completion on failure and records evidence.
+event: Stop
