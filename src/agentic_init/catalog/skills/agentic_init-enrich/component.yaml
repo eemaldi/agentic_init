@@ -1,0 +1,2 @@
+description: One-off pass that maps this repository and fills the agentic_init-generated docs and CLAUDE.md placeholders with verified project knowledge. Invoke explicitly only.
+user_only: true

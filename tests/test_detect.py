@@ -1,5 +1,5 @@
-from agentinit.config import Mode
-from agentinit.detect import detect
+from agentic_init.config import Mode
+from agentic_init.detect import detect
 
 
 def test_python_uv_project(python_project):

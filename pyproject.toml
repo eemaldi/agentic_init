@@ -1,5 +1,5 @@
 [project]
-name = "agentic-init"
+name = "agentic_init"
 version = "0.1.0"
 description = "Bootstrap any repository with a lean, best-practice agentic development setup for Claude Code."
 readme = "README.md"
@@ -24,13 +24,12 @@ dependencies = [
 ]
 
 [project.scripts]
-agentinit = "agentinit.cli:app"
-agentic-init = "agentinit.cli:app"
+agentic_init = "agentic_init.cli:app"
 
 [project.urls]
-Homepage = "https://github.com/eemaldi/agent-init"
-Repository = "https://github.com/eemaldi/agent-init"
-Issues = "https://github.com/eemaldi/agent-init/issues"
+Homepage = "https://github.com/eemaldi/agentic_init"
+Repository = "https://github.com/eemaldi/agentic_init"
+Issues = "https://github.com/eemaldi/agentic_init/issues"
 
 [dependency-groups]
 dev = ["pytest>=8", "ruff>=0.6"]
@@ -40,14 +39,14 @@ requires = ["hatchling"]
 build-backend = "hatchling.build"
 
 [tool.hatch.build.targets.wheel]
-packages = ["src/agentinit"]
+packages = ["src/agentic_init"]
 
 [tool.hatch.build.targets.sdist]
-include = ["src/agentinit", "README.md", "pyproject.toml"]
+include = ["src/agentic_init", "README.md", "pyproject.toml"]
 
 [tool.ruff]
 line-length = 120
-extend-exclude = ["src/agentinit/catalog", ".claude/hooks"]
+extend-exclude = ["src/agentic_init/catalog", ".claude/hooks"]
 target-version = "py311"
 
 [tool.ruff.lint]

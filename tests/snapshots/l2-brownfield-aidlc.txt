@@ -93,7 +93,7 @@ def main() -> int:
     command = json.load(sys.stdin).get("tool_input", {}).get("command", "")
     for pattern, reason in DANGEROUS:
         if re.search(pattern, command):
-            print(f"Blocked by agentinit: {reason}. If this is required, ask the human to run it.", file=sys.stderr)
+            print(f"Blocked by agentic_init: {reason}. If this is required, ask the human to run it.", file=sys.stderr)
             return 2
     return 0
 
@@ -205,7 +205,7 @@ def main() -> int:
         candidates = [tool_input.get("file_path", ""), tool_input.get("path", "")]
     blocked = [path for path in candidates if path and is_secret(path)]
     if blocked:
-        print(f"Blocked by agentinit: {blocked[0]} is a secret file. Ask the human for the specific non-secret value you need.", file=sys.stderr)
+        print(f"Blocked by agentic_init: {blocked[0]} is a secret file. Ask the human for the specific non-secret value you need.", file=sys.stderr)
         return 2
     return 0
 
@@ -273,7 +273,7 @@ def main() -> int:
         return 0
     blocks = state.get("consecutive_blocks", 0)
     if payload.get("stop_hook_active") and blocks >= MAX_CONSECUTIVE_BLOCKS:
-        print(json.dumps({"systemMessage": "agentinit: checks still failing after repeated attempts; human attention needed."}))
+        print(json.dumps({"systemMessage": "agentic_init: checks still failing after repeated attempts; human attention needed."}))
         return 0
 
     results = [run(name, command) for name, command in CHECKS]
@@ -694,10 +694,10 @@ description: Design and run tests for a change, filling coverage gaps for behavi
 - Remaining untested risk
 
 === .gitignore
-# agentinit:begin agent-state
+# agentic_init:begin agent-state
 .claude/settings.local.json
 .claude/state/
-# agentinit:end agent-state
+# agentic_init:end agent-state
 
 === .mcp.json
 {
@@ -713,16 +713,16 @@ description: Design and run tests for a change, filling coverage gaps for behavi
 }
 
 === CLAUDE.md
-<!-- agentinit:begin project -->
+<!-- agentic_init:begin project -->
 # shop
 
 ## Stack
 - Languages: python
 - Frameworks: FastAPI
 - Package managers: uv
-<!-- agentinit:end project -->
+<!-- agentic_init:end project -->
 
-<!-- agentinit:begin commands -->
+<!-- agentic_init:begin commands -->
 ## Commands
 
 - Install: `uv sync`
@@ -733,9 +733,9 @@ description: Design and run tests for a change, filling coverage gaps for behavi
 - Typecheck: `uv run mypy .`
 
 Use these commands instead of guessing. If a command you need is missing, ask, then record it here.
-<!-- agentinit:end commands -->
+<!-- agentic_init:end commands -->
 
-<!-- agentinit:begin workflow -->
+<!-- agentic_init:begin workflow -->
 ## Working agreement
 
 Autonomy: **A2 (Delegated implementation)**
@@ -750,9 +750,9 @@ Understand before improving. Read `docs/brownfield/` first and follow `/brownfie
 
 ### Learning loop
 When a mistake repeats, fix the system, not just the instance: update this file, a rule, a skill, a hook or a test.
-<!-- agentinit:end workflow -->
+<!-- agentic_init:end workflow -->
 
-<!-- agentinit:begin verification -->
+<!-- agentic_init:begin verification -->
 ## Definition of done
 
 1. Run targeted tests, then the suite: `uv run pytest`.
@@ -765,9 +765,9 @@ A Stop hook re-runs lint, typecheck and tests on any unverified commit or change
 Work is complete only with evidence: run `/evidence-gate` before declaring a story done.
 
 Bash runs in an OS sandbox that cannot read protected paths. If a command fails inside it, ask the human before running it unsandboxed; never work around it.
-<!-- agentinit:end verification -->
+<!-- agentic_init:end verification -->
 
-<!-- agentinit:begin context -->
+<!-- agentic_init:begin context -->
 ## Where to look
 
 - `.claude/rules/`: architecture, testing, security rules, loaded when relevant.
@@ -779,7 +779,7 @@ Bash runs in an OS sandbox that cannot read protected paths. If a command fails 
 - `docs/evidence/`: verification evidence per story.
 
 Keep this file short and stable. Procedures belong in skills, details in docs.
-<!-- agentinit:end context -->
+<!-- agentic_init:end context -->
 
 === docs/architecture/system-overview.md
 # System overview
@@ -799,27 +799,27 @@ Keep this file short and stable. Procedures belong in skills, details in docs.
 === docs/brownfield/critical-paths.md
 # Critical paths
 
-<!-- Filled by /discover or `agentinit enrich`. Mark unverified claims with (unverified). -->
+<!-- Filled by /discover or `agentic_init enrich`. Mark unverified claims with (unverified). -->
 
 === docs/brownfield/hotspots.md
 # Hotspots
 
-<!-- Filled by /discover or `agentinit enrich`. Mark unverified claims with (unverified). -->
+<!-- Filled by /discover or `agentic_init enrich`. Mark unverified claims with (unverified). -->
 
 === docs/brownfield/invariants.md
 # Invariants
 
-<!-- Filled by /discover or `agentinit enrich`. Mark unverified claims with (unverified). -->
+<!-- Filled by /discover or `agentic_init enrich`. Mark unverified claims with (unverified). -->
 
 === docs/brownfield/system-map.md
 # System map
 
-<!-- Filled by /discover or `agentinit enrich`. Mark unverified claims with (unverified). -->
+<!-- Filled by /discover or `agentic_init enrich`. Mark unverified claims with (unverified). -->
 
 === docs/brownfield/test-gaps.md
 # Test gaps
 
-<!-- Filled by /discover or `agentinit enrich`. Mark unverified claims with (unverified). -->
+<!-- Filled by /discover or `agentic_init enrich`. Mark unverified claims with (unverified). -->
 
 === docs/decisions/0000-template.md
 # NNNN: Title
