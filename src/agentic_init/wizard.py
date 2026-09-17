@@ -12,7 +12,10 @@ COMMAND_NAMES = list(Commands.model_fields)
 def defaults(name: str, detection: Detection) -> Config:
     level, mode = detection.suggested_level, detection.mode
     return Config(
-        project=Project(name=name),
+        project=Project(
+            name=detection.identity.name or name,
+            description=detection.identity.description or "",
+        ),
         level=level,
         mode=mode,
         modules=Modules(**suggested_modules(level)),
@@ -49,8 +52,8 @@ def _mcp_overrides(level: int, mode: Mode, suggest_github: bool) -> tuple[list[s
 def run(name: str, detection: Detection) -> Config:
     base = defaults(name, detection)
     project = Project(
-        name=questionary.text("Project name", default=name).unsafe_ask(),
-        description=questionary.text("One-line description (optional)").unsafe_ask(),
+        name=questionary.text("Project name", default=base.project.name).unsafe_ask(),
+        description=questionary.text("One-line description (optional)", default=base.project.description).unsafe_ask(),
     )
     mode = questionary.select(
         "Project type",

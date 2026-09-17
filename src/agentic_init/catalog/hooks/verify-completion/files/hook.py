@@ -12,6 +12,7 @@ CHECKS = {{ [["lint", commands.lint], ["typecheck", commands.typecheck], ["test"
 ROOT = Path(os.environ.get("CLAUDE_PROJECT_DIR", "."))
 STATE = ROOT / ".claude" / "state" / "verification.json"
 TIMEOUT_SECONDS = 900
+MISSING_COMMAND = 127
 MAX_CONSECUTIVE_BLOCKS = 3
 OUTPUT_TAIL = 3000
 
@@ -42,6 +43,7 @@ def run(name: str, command: str) -> dict:
         "check": name,
         "command": command,
         "exit_code": code,
+        "available": not (code == MISSING_COMMAND or "command not found" in output or "No such file" in output[:200]),
         "seconds": round(time.monotonic() - started, 1),
         "output_tail": output[-OUTPUT_TAIL:],
     }
@@ -61,7 +63,10 @@ def main() -> int:
         return 0
 
     results = [run(name, command) for name, command in CHECKS]
-    passed = all(r["exit_code"] == 0 for r in results)
+    # A missing toolchain is not a failed check: it means nothing was verified here, and
+    # blocking on it would deadlock the session instead of telling the human what is wrong.
+    unavailable = [r for r in results if not r["available"]]
+    passed = all(r["exit_code"] == 0 for r in results if r["available"])
     STATE.parent.mkdir(parents=True, exist_ok=True)
     STATE.write_text(json.dumps({
         "fingerprint": current,
@@ -71,10 +76,15 @@ def main() -> int:
         "results": results,
     }, indent=2))
     if passed:
+        if unavailable:
+            missing = ", ".join(f"`{r['command']}`" for r in unavailable)
+            print(json.dumps({"systemMessage": f"agentic_init: could not run {missing}; that check is unverified."}))
         return 0
 
     failures = "\n\n".join(
-        f"$ {r['command']} (exit {r['exit_code']})\n{r['output_tail']}" for r in results if r["exit_code"]
+        f"$ {r['command']} (exit {r['exit_code']})\n{r['output_tail']}"
+        for r in results
+        if r["exit_code"] and r["available"]
     )
     print(json.dumps({"decision": "block", "reason": f"Verification failed. Fix before finishing:\n\n{failures}"}))
     return 0

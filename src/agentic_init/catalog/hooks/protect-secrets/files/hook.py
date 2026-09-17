@@ -29,12 +29,37 @@ def relative(path: str) -> str:
     return path
 
 
+def matches(path: str) -> bool:
+    return bool(SECRET.search(path)) and not TEMPLATE.search(path)
+
+
 def is_secret(path: str) -> bool:
     path = relative(path)
     if any(glob in path for glob in "*?["):
-        patterns = {path.removeprefix("./"), Path(path).name}
-        return any(fnmatch.fnmatch(sample, pattern) for sample in SAMPLE_SECRETS for pattern in patterns)
-    return bool(SECRET.search(path)) and not TEMPLATE.search(path)
+        return is_secret_glob(path)
+    return matches(path)
+
+
+def is_secret_glob(pattern: str) -> bool:
+    """Block a glob that can sweep up a secret: one whose own shape matches a secret name
+    (`*.json`, `deploy/*.pem`), or that currently expands onto a real secret file. A pattern
+    that says nothing about secrets, such as `tests/*` or a bare `*` in a directory that holds
+    none, is ordinary work and stays allowed."""
+    pattern = pattern.removeprefix("./")
+    directory, _, name = pattern.rpartition("/")
+    candidates = {pattern}
+    if directory and re.sub(r"[*?\[\]]", "", name):
+        candidates.add(name)
+    # A pure wildcard (`*`, `./*`, `*/*`) says nothing about secrets on its own; only the files it
+    # actually expands onto do. Judging it by shape blocks every ordinary glob in the repository.
+    if re.sub(r"[*?\[\]/]", "", pattern) and any(
+        fnmatch.fnmatch(sample, candidate) for sample in SAMPLE_SECRETS for candidate in candidates
+    ):
+        return True
+    try:
+        return any(matches(match.relative_to(ROOT).as_posix()) for match in ROOT.glob(pattern))
+    except (OSError, ValueError, IndexError, NotImplementedError):
+        return False
 
 
 def shell_targets(command: str) -> list[str]:
@@ -59,7 +84,10 @@ def main() -> int:
         candidates = [tool_input.get("file_path", ""), tool_input.get("path", "")]
     blocked = [path for path in candidates if path and is_secret(path)]
     if blocked:
-        print(f"Blocked by agentic_init: {blocked[0]} is a secret file. Ask the human for the specific non-secret value you need.", file=sys.stderr)
+        print(
+            f"Blocked by agentic_init: {blocked[0]} is a secret file. Ask the human for the specific non-secret value you need.",
+            file=sys.stderr,
+        )
         return 2
     return 0
 

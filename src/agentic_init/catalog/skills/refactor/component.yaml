@@ -1,0 +1,1 @@
+description: Restructure code without changing behaviour, holding tests green at every step. Use when readability, duplication or coupling is the problem rather than a missing feature.

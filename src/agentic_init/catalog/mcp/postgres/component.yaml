@@ -1,0 +1,5 @@
+description: Read-only PostgreSQL access for schema inspection and query verification. Point DATABASE_URL_READONLY at a replica or a least-privilege role.
+env: [DATABASE_URL_READONLY]
+server:
+  command: npx
+  args: ["-y", "@modelcontextprotocol/server-postgres", "${DATABASE_URL_READONLY}"]

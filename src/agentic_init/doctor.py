@@ -8,9 +8,12 @@ from pathlib import Path
 
 import yaml
 
+from agentic_init.ci import WORKFLOW_PATH
 from agentic_init.config import ConfigError
 from agentic_init.engine import Build, build
 from agentic_init.lock import Lock, digest
+from agentic_init.targets.base import Strategy
+from agentic_init.targets.shared import render_shared
 
 CLAUDE_MD_MAX_LINES = 300
 MIN_DESCRIPTION_WORDS = 8
@@ -85,6 +88,23 @@ def _hooks(root: Path) -> list[Finding]:
     return findings or [Finding(Level.OK, f"{len(hooks)} hooks are configured")]
 
 
+SANDBOX_TOOLS = ("bwrap", "socat")
+
+
+def _sandbox(root: Path, result: Build) -> list[Finding]:
+    if result.blueprint.policy.sandbox == "off":
+        return []
+    missing = [tool for tool in SANDBOX_TOOLS if not shutil.which(tool)]
+    if missing:
+        return [
+            Finding(
+                Level.WARN,
+                f"sandbox is enabled but {', '.join(missing)} not installed; Bash will run unsandboxed",
+            )
+        ]
+    return [Finding(Level.OK, "sandbox dependencies are available")]
+
+
 def _commands(result: Build) -> list[Finding]:
     commands = result.blueprint.commands.model_dump(exclude_none=True)
     missing = {name: cmd for name, cmd in commands.items() if not shutil.which(cmd.split()[0])}
@@ -118,6 +138,43 @@ def _mcp_env(root: Path) -> list[Finding]:
     ]
 
 
+def _ci(root: Path, result: Build) -> list[Finding]:
+    workflow = root / WORKFLOW_PATH
+    if not result.blueprint.ci:
+        if result.blueprint.config.level >= 1 and not any(root.glob(".github/workflows/*.y*ml")):
+            return [Finding(Level.WARN, "no CI workflow: nothing verifies the agent's work independently")]
+        return []
+    if not workflow.exists():
+        return [Finding(Level.ERROR, f"{WORKFLOW_PATH} is missing; run `agentic_init apply`")]
+    try:
+        document = yaml.safe_load(workflow.read_text())
+    except yaml.YAMLError as error:
+        return [Finding(Level.ERROR, f"{WORKFLOW_PATH} is not valid YAML: {error}")]
+    runs = [step.get("run", "") for job in document.get("jobs", {}).values() for step in job.get("steps", [])]
+    test = result.blueprint.commands.test
+    if test and test not in runs:
+        return [Finding(Level.WARN, f"CI does not run the test command `{test}`")]
+    return [Finding(Level.OK, f"CI runs {len(document.get('jobs', {}))} job(s) with the project's own commands")]
+
+
+def _seeds(root: Path, result: Build) -> list[Finding]:
+    """Seeded docs are worthless until someone fills them in; say so instead of counting files."""
+    untouched = [
+        op.path
+        for op in render_shared(result.blueprint)
+        if op.strategy == Strategy.SEED
+        and op.path.startswith("docs/")
+        and "template" not in Path(op.path).name
+        and (root / op.path).is_file()
+        and (root / op.path).read_text() == op.content
+    ]
+    if not untouched:
+        return []
+    listing = ", ".join(untouched[:3]) + (f" (+{len(untouched) - 3} more)" if len(untouched) > 3 else "")
+    hint = "run `agentic_init enrich`" if result.blueprint.config.enrich else "fill them in or enable `enrich`"
+    return [Finding(Level.WARN, f"{len(untouched)} doc(s) still hold the template: {listing}; {hint}")]
+
+
 def diagnose(root: Path) -> list[Finding]:
     try:
         result = build(root)
@@ -129,5 +186,8 @@ def diagnose(root: Path) -> list[Finding]:
         *_hooks(root),
         *_commands(result),
         *_mcp_env(root),
+        *_sandbox(root, result),
+        *_ci(root, result),
+        *_seeds(root, result),
         *_drift(root, result),
     ]

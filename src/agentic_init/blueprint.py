@@ -38,6 +38,7 @@ class Blueprint:
     detection: Detection
     commands: Commands
     autonomy: int
+    ci: bool
     sections: tuple[Section, ...]
     components: tuple[Component, ...]
     policy: Policy

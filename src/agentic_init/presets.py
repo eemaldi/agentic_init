@@ -37,16 +37,18 @@ _CUMULATIVE: dict[int, dict[Kind, list[str]]] = {
         Kind.MCP: ["github"],
     },
     2: {
-        Kind.SKILLS: ["debug", "spec", "security-review"],
+        Kind.SKILLS: ["debug", "spec", "security-review", "refactor", "update-docs"],
         Kind.AGENTS: ["test-engineer", "security-reviewer"],
         Kind.HOOKS: ["post-edit-format"],
         Kind.RULES: ["architecture", "testing", "security"],
+        Kind.MCP: ["linear", "sentry"],
         Kind.DOCS: ["architecture", "decisions", "stories", "operations"],
     },
     3: {
-        Kind.SKILLS: ["discover", "release"],
+        Kind.SKILLS: ["discover", "release", "migrate-db", "performance-review", "incident-analysis"],
         Kind.AGENTS: ["explorer", "architect"],
         Kind.HOOKS: ["verify-completion"],
+        Kind.MCP: ["playwright"],
     },
     4: {
         Kind.HOOKS: ["audit-log"],

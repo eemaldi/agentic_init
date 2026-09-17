@@ -8,6 +8,10 @@
 {% endif %}
 3. Review your own diff (`git diff`) for scope creep and leftovers.
 4. Report: what changed, evidence (commands run and results), residual risk, follow-ups.
+{% if ci %}
+
+The same checks run in CI (`.github/workflows/agentic-checks.yml`) as independent evidence. A claim is not done until CI agrees; fill in the evidence table in `.github/pull_request_template.md` when you open a PR.
+{% endif %}
 {% if "verify-completion" in selected.hooks %}
 
 A Stop hook re-runs lint, typecheck and tests on any unverified commit or change and blocks completion while they fail.

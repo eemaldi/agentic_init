@@ -27,6 +27,21 @@ Autonomy: **A{{ autonomy }} ({{ autonomy_name }})**
 {% if selected.agents %}
 - Agents: {% for name in selected.agents %}`{{ name }}`{{ ", " if not loop.last }}{% endfor %}. The agent that writes a change never approves it; delegate review to a read-only agent.
 {% endif %}
+{% if level >= 2 %}
+
+### Autonomy by change
+Autonomy is per change, not per project. Raise it when verification is strong, lower it when the blast radius grows:
+
+| Change | Autonomy |
+| --- | --- |
+| Formatting, docs | A{{ [autonomy + 1, 5] | min }} |
+| Test cleanup, isolated bug fix | A{{ autonomy }} |
+| Normal feature | A{{ autonomy }} |
+| Schema or data migration | A2 |
+| Auth, security or payment logic | A1–A2 |
+| Production infrastructure | A0–A1 |
+| Destructive production action | A0 (ask, never act) |
+{% endif %}
 {% if mode == "brownfield" %}
 
 ### Existing codebase
@@ -40,7 +55,15 @@ Non-trivial features go through BMAD: brief → PRD → architecture → stories
 {% if level >= 3 %}
 
 ### Parallel work
-Use subagents for research and review. Use `claude --worktree <name>` whenever more than one session edits code.
+Use subagents for research and review: they keep exploration out of this context. Use `claude --worktree <name>` whenever more than one session edits code, so parallel work never shares a working tree.
+{% endif %}
+{% if workspaces %}
+
+### Workspaces
+{% for path in workspaces %}
+- `{{ path }}`
+{% endfor %}
+Work in one workspace at a time. Keep workspace-specific conventions in `<workspace>/.claude/rules/`, not in this file, and run that workspace's tests before the full suite.
 {% endif %}
 
 ### Learning loop

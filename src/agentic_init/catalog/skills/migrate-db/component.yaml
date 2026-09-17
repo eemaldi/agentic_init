@@ -1,0 +1,2 @@
+description: Plan and apply a database schema or data migration with an expand/contract sequence, verification and a rollback path. Invoke explicitly for any schema or data change.
+user_only: true

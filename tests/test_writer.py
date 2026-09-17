@@ -1,4 +1,6 @@
 import json
+import os
+import subprocess
 
 from conftest import apply, configure
 
@@ -116,8 +118,9 @@ def test_enterprise_level_sandboxes_audits_and_allowlists_mcp(python_project):
     settings = json.loads((python_project / ".claude/settings.json").read_text())
     assert settings["sandbox"]["enabled"] and not settings["sandbox"]["allowUnsandboxedCommands"]
     assert settings["permissions"]["disableBypassPermissionsMode"] == "disable"
-    assert settings["enabledMcpjsonServers"] == ["github"]
-    assert settings["allowedMcpServers"] == [{"serverName": "github"}]
+    servers = ["github", "linear", "sentry", "playwright"]
+    assert settings["enabledMcpjsonServers"] == servers
+    assert settings["allowedMcpServers"] == [{"serverName": name} for name in servers]
     assert "audit-log.py" in json.dumps(settings["hooks"]["PostToolUse"])
 
     configure(python_project, level=3)
@@ -147,9 +150,32 @@ def test_production_level_sandboxes_secrets_without_loosening_approvals(python_p
 def test_enterprise_level_without_mcp_blocks_unlisted_servers_and_keeps_user_approvals(python_project):
     (python_project / ".claude").mkdir()
     (python_project / ".claude/settings.json").write_text(json.dumps({"enableAllProjectMcpServers": True}))
-    configure(python_project, level=4, exclude={"mcp": ["github"], "hooks": ["audit-log"]})
+    configure(
+        python_project,
+        level=4,
+        exclude={"mcp": ["github", "linear", "sentry", "playwright"], "hooks": ["audit-log"]},
+    )
     apply(python_project)
 
     settings = json.loads((python_project / ".claude/settings.json").read_text())
     assert settings["allowedMcpServers"] == [] and settings["enableAllProjectMcpServers"] is True
     assert "audit.jsonl" not in (python_project / "CLAUDE.md").read_text()
+
+
+def test_generated_hooks_do_not_break_a_python_projects_lint_command(python_project):
+    configure(python_project, level=2)
+    apply(python_project)
+
+    assert (python_project / ".claude/ruff.toml").exists()
+    result = subprocess.run(
+        ["ruff", "check", "."], cwd=python_project, capture_output=True, text=True, env={"PATH": os.environ["PATH"]}
+    )
+
+    assert result.returncode == 0, result.stdout
+
+
+def test_no_ruff_config_for_a_project_without_python(node_project):
+    configure(node_project, level=2)
+    apply(node_project)
+
+    assert not (node_project / ".claude/ruff.toml").exists()
