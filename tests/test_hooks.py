@@ -83,9 +83,15 @@ def test_safe_commands_pass(hooks, command):
         ("Bash", {"command": "cat *.json"}, True),
         ("Bash", {"command": "find . -name .env -exec cat {} +"}, True),
         ("Bash", {"command": "cat *.*"}, True),
-        ("Bash", {"command": "cat ./*"}, True),
+        ("Bash", {"command": "cat ./*"}, False),
         ("Bash", {"command": "cat deploy/*.pem"}, True),
         ("Bash", {"command": "uv run pytest tests/test_env.py"}, False),
+        # A scoped glob is ordinary work: blocking it made every generated repo unusable.
+        ("Bash", {"command": "grep -rn TODO tests/*"}, False),
+        ("Bash", {"command": "ls src/*"}, False),
+        ("Bash", {"command": "cat docs/**/*.md"}, False),
+        ("Bash", {"command": "ruff check src/*.py"}, False),
+        ("Bash", {"command": "cat config/*"}, False),
     ],
 )
 def test_secret_files_are_protected(hooks, tool, tool_input, blocked):
@@ -160,3 +166,41 @@ def test_audit_log_records_tool_calls(python_project):
     [record] = [json.loads(line) for line in (python_project / ".claude/state/audit.jsonl").read_text().splitlines()]
     assert record["tool"] == "Write" and record["session"] == "s1"
     assert len(record["input"]["content"]) < 600
+
+
+def test_verify_completion_reports_a_missing_toolchain_instead_of_blocking(python_project):
+    configure(python_project, level=3, commands={"lint": "true", "test": "definitely-not-installed --all"})
+    apply(python_project)
+    git = ["git", "-c", "user.email=t@t", "-c", "user.name=t"]
+    subprocess.run([*git, "init", "-q"], cwd=python_project, check=True)
+    subprocess.run([*git, "commit", "-q", "--allow-empty", "-m", "init"], cwd=python_project, check=True)
+    env = {"CLAUDE_PROJECT_DIR": str(python_project), "PATH": "/usr/bin:/bin"}
+
+    result = run_hook(
+        python_project / ".claude/hooks/verify-completion.py", {"stop_hook_active": False}, cwd=python_project, env=env
+    )
+
+    message = json.loads(result.stdout)
+    assert "decision" not in message
+    assert "definitely-not-installed --all" in message["systemMessage"]
+    evidence = json.loads((python_project / ".claude/state/verification.json").read_text())
+    checks = {r["check"]: r["available"] for r in evidence["results"]}
+    assert checks["lint"] is True and checks["test"] is False
+
+
+def test_broad_globs_are_blocked_only_where_a_secret_actually_sits(hooks, python_project):
+    env = {"CLAUDE_PROJECT_DIR": str(python_project), "PATH": "/usr/bin:/bin"}
+
+    def blocked(command):
+        payload = {"tool_name": "Bash", "tool_input": {"command": command}}
+        return run_hook(hooks / "protect-secrets.py", payload, cwd=python_project, env=env).returncode == 2
+
+    assert not blocked("cat *")
+    assert not blocked("wc -l config/*")
+
+    (python_project / "credentials.json").write_text("{}\n")
+    (python_project / "config").mkdir()
+    (python_project / "config" / "server.pem").write_text("key\n")
+
+    assert blocked("cat *")
+    assert blocked("wc -l config/*")

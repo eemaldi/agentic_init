@@ -86,6 +86,7 @@ class Config(Strict):
     include: Selection = Selection()
     exclude: Selection = Selection()
     commands: Commands = Field(Commands(), description="Override detected commands; set one to null to disable it.")
+    ci: bool | None = Field(None, description="Generate a CI workflow; omit to decide from the repository.")
     enrich: bool = Field(False, description="Generate the agentic_init-enrich skill for a Claude mapping pass.")
 
     @field_validator("targets")

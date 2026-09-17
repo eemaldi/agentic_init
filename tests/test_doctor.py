@@ -2,6 +2,7 @@ import json
 
 from conftest import apply, configure
 
+from agentic_init.config import Mode
 from agentic_init.doctor import Level, diagnose
 
 
@@ -47,3 +48,35 @@ def test_non_command_hooks_and_invalid_mcp_json_are_tolerated(python_project):
 
     assert any(f.level == Level.ERROR and ".mcp.json is not valid JSON" in f.message for f in findings)
     assert not any("hook script missing" in f.message for f in findings)
+
+
+def test_untouched_doc_templates_are_reported(python_project):
+    configure(python_project, level=2, mode=Mode.BROWNFIELD)
+    apply(python_project)
+
+    findings = diagnose(python_project)
+
+    assert any("still hold the template" in f.message for f in findings)
+
+    for doc in (python_project / "docs").rglob("*.md"):
+        doc.write_text("# Real content\n\nThe order service owns checkout.\n")
+
+    assert not any("still hold the template" in f.message for f in diagnose(python_project))
+
+
+def test_missing_ci_is_a_warning_and_generated_ci_is_checked(python_project):
+    configure(python_project, level=2)
+    apply(python_project)
+
+    assert any("no CI workflow" in f.message for f in diagnose(python_project))
+
+    configure(python_project, level=2, ci=True)
+    apply(python_project)
+    findings = diagnose(python_project)
+
+    assert any(f.level == Level.OK and "CI runs" in f.message for f in findings)
+
+    workflow = python_project / ".github/workflows/agentic-checks.yml"
+    workflow.write_text(workflow.read_text().replace("uv run pytest", "echo skipped"))
+
+    assert any("CI does not run the test command" in f.message for f in diagnose(python_project))

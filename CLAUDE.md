@@ -3,7 +3,9 @@ Configurable, runnable, makes you kickstart you agentic development in minutes �
 
 ## Architecture
 `agentic_init.yaml` → `resolver.py` (presets + modules + detection + Jinja catalog) → tool-agnostic `Blueprint` → `targets/*` render `FileOp`s → `writer.py` plans and applies them (owned files, managed blocks, JSON merge, seeds), tracking ownership in `.agentic_init.lock`.
-`Guideline.md` is the source of truth for what gets generated. Extend via `/add-catalog-component` and `/add-target`; regenerate golden files with `scripts/snapshot-update.sh`.
+The operating model in `Guideline.md` (kept outside this repository) is the specification for what gets
+generated; `docs/guideline-coverage.md` maps each of its 61 sections to the artifact that manifests it, and
+must be updated whenever the catalog or targets change. Extend via `/add-catalog-component` and `/add-target`; regenerate golden files with `scripts/snapshot-update.sh`.
 
 <!-- agentic_init:begin project -->
 # agentic_init
@@ -49,4 +51,14 @@ When a mistake repeats, fix the system, not just the instance: update this file,
 2. Run static checks: `uv run ruff check .`.
 3. Review your own diff (`git diff`) for scope creep and leftovers.
 4. Report: what changed, evidence (commands run and results), residual risk, follow-ups.
+
+The same checks run in CI (`.github/workflows/agentic-checks.yml`) as independent evidence. A claim is not done until CI agrees; fill in the evidence table in `.github/pull_request_template.md` when you open a PR.
 <!-- agentic_init:end verification -->
+
+<!-- agentic_init:begin context -->
+## Where to look
+
+- `.github/`: CI checks and the pull request template.
+
+Keep this file short and stable. Procedures belong in skills, details in docs.
+<!-- agentic_init:end context -->

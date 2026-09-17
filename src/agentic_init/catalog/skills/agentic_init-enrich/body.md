@@ -6,7 +6,7 @@ Replace placeholders in generated docs with verified knowledge about this reposi
 1. Explore the repository: manifests, entry points, directory layout, tests, CI config, deployment files.
 2. Fill in, keeping each file concise and factual:
 {% if "brownfield" in selected.docs %}
-   - `docs/brownfield/system-map.md`, `critical-paths.md`, `invariants.md`, `hotspots.md`, `test-gaps.md`
+   - `docs/brownfield/system-map.md`, `critical-paths.md`, `invariants.md`, `hotspots.md`, `test-gaps.md`, `migration-plan.md` (leave the migration plan empty if no migration is in progress; say so in the file)
 {% endif %}
 {% if "architecture" in selected.docs %}
    - `docs/architecture/system-overview.md`

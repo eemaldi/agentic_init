@@ -1,0 +1,4 @@
+description: Linear issues, projects and cycles, so stories and acceptance criteria come from the tracker instead of chat.
+server:
+  type: http
+  url: https://mcp.linear.app/mcp

@@ -48,7 +48,9 @@
       "Bash(git clean)",
       "Bash(git clean *)",
       "Bash(git rebase)",
-      "Bash(git rebase *)"
+      "Bash(git rebase *)",
+      "Bash(uv sync)",
+      "Bash(uv sync *)"
     ],
     "deny": [
       "Bash(rm -rf *)",

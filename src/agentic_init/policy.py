@@ -28,7 +28,7 @@ PROTECTED_PATHS = (
 def build_policy(autonomy: int, level: int, commands: Commands) -> Policy:
     project = [c for c in (commands.test, commands.lint, commands.typecheck, commands.format, commands.build) if c]
     allowed = [*READ_ONLY_GIT, *project]
-    ask = ["git reset --hard", "git clean", "git rebase"]
+    ask = ["git reset --hard", "git clean", "git rebase", *([commands.install] if commands.install else [])]
     denied = list(ALWAYS_DENIED)
 
     if autonomy >= 3:
