@@ -30,4 +30,13 @@ Brownfield repositories additionally get `docs/brownfield/` (system map, critica
 hotspots, test gaps, migration plan) and a `/brownfield-change` procedure; `agentic_init enrich` runs Claude
 Code once to fill those documents from the actual code.
 
-`docs/guideline-coverage.md` maps the operating model this generates onto the files it produces.
+## Documentation
+
+- [Setup Guide](docs/SETUP.md) — install, bootstrap a project, what gets written
+- [Architecture](docs/ARCHITECTURE.md) — the generation pipeline and every module's role
+- [CLI Reference](docs/CLI.md) — every command and flag
+- [Configuration Reference](docs/CONFIGURATION.md) — the full `agentic_init.yaml` schema
+- [Catalog Reference](docs/CATALOG.md) — every skill, agent, hook, rule, MCP server and doc seed
+- [Extending agentic_init](docs/EXTENDING.md) — add a catalog component or a new target tool
+- [Verification Log](docs/VERIFICATION.md) — what was actually run to confirm this documentation, and what wasn't
+- [Operating-model coverage](docs/guideline-coverage.md) — each section of the operating model mapped to the artifact that manifests it
