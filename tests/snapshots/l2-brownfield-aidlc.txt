@@ -3,6 +3,7 @@
 name: reviewer
 description: Independent read-only reviewer for diffs and pull requests. Use proactively after implementing any non-trivial change and before opening or merging a PR.
 tools: Read, Grep, Glob, Bash
+model: sonnet
 ---
 
 ## Purpose
@@ -32,6 +33,7 @@ Security vulnerabilities, data-loss risk or breaking API changes: flag at the to
 name: security-reviewer
 description: Adversarial read-only security reviewer. Use proactively for changes touching authentication, authorization, user input, secrets, data access, dependencies or infrastructure.
 tools: Read, Grep, Glob, Bash
+model: opus
 ---
 
 ## Purpose
@@ -54,6 +56,7 @@ Critical or high severity findings: state them first and recommend blocking the 
 name: test-engineer
 description: Writes and repairs tests, closes coverage gaps and diagnoses flaky or failing suites. Use when a change lacks tests or a test run fails for unclear reasons.
 tools: Read, Grep, Glob, Edit, Write, Bash
+model: sonnet
 ---
 
 ## Purpose
@@ -175,12 +178,37 @@ def relative(path: str) -> str:
     return path
 
 
+def matches(path: str) -> bool:
+    return bool(SECRET.search(path)) and not TEMPLATE.search(path)
+
+
 def is_secret(path: str) -> bool:
     path = relative(path)
     if any(glob in path for glob in "*?["):
-        patterns = {path.removeprefix("./"), Path(path).name}
-        return any(fnmatch.fnmatch(sample, pattern) for sample in SAMPLE_SECRETS for pattern in patterns)
-    return bool(SECRET.search(path)) and not TEMPLATE.search(path)
+        return is_secret_glob(path)
+    return matches(path)
+
+
+def is_secret_glob(pattern: str) -> bool:
+    """Block a glob that can sweep up a secret: one whose own shape matches a secret name
+    (`*.json`, `deploy/*.pem`), or that currently expands onto a real secret file. A pattern
+    that says nothing about secrets, such as `tests/*` or a bare `*` in a directory that holds
+    none, is ordinary work and stays allowed."""
+    pattern = pattern.removeprefix("./")
+    directory, _, name = pattern.rpartition("/")
+    candidates = {pattern}
+    if directory and re.sub(r"[*?\[\]]", "", name):
+        candidates.add(name)
+    # A pure wildcard (`*`, `./*`, `*/*`) says nothing about secrets on its own; only the files it
+    # actually expands onto do. Judging it by shape blocks every ordinary glob in the repository.
+    if re.sub(r"[*?\[\]/]", "", pattern) and any(
+        fnmatch.fnmatch(sample, candidate) for sample in SAMPLE_SECRETS for candidate in candidates
+    ):
+        return True
+    try:
+        return any(matches(match.relative_to(ROOT).as_posix()) for match in ROOT.glob(pattern))
+    except (OSError, ValueError, IndexError, NotImplementedError):
+        return False
 
 
 def shell_targets(command: str) -> list[str]:
@@ -205,7 +233,10 @@ def main() -> int:
         candidates = [tool_input.get("file_path", ""), tool_input.get("path", "")]
     blocked = [path for path in candidates if path and is_secret(path)]
     if blocked:
-        print(f"Blocked by agentic_init: {blocked[0]} is a secret file. Ask the human for the specific non-secret value you need.", file=sys.stderr)
+        print(
+            f"Blocked by agentic_init: {blocked[0]} is a secret file. Ask the human for the specific non-secret value you need.",
+            file=sys.stderr,
+        )
         return 2
     return 0
 
@@ -228,6 +259,7 @@ CHECKS = [["lint", "uv run ruff check ."], ["typecheck", "uv run mypy ."], ["tes
 ROOT = Path(os.environ.get("CLAUDE_PROJECT_DIR", "."))
 STATE = ROOT / ".claude" / "state" / "verification.json"
 TIMEOUT_SECONDS = 900
+MISSING_COMMAND = 127
 MAX_CONSECUTIVE_BLOCKS = 3
 OUTPUT_TAIL = 3000
 
@@ -258,6 +290,7 @@ def run(name: str, command: str) -> dict:
         "check": name,
         "command": command,
         "exit_code": code,
+        "available": not (code == MISSING_COMMAND or "command not found" in output or "No such file" in output[:200]),
         "seconds": round(time.monotonic() - started, 1),
         "output_tail": output[-OUTPUT_TAIL:],
     }
@@ -277,7 +310,10 @@ def main() -> int:
         return 0
 
     results = [run(name, command) for name, command in CHECKS]
-    passed = all(r["exit_code"] == 0 for r in results)
+    # A missing toolchain is not a failed check: it means nothing was verified here, and
+    # blocking on it would deadlock the session instead of telling the human what is wrong.
+    unavailable = [r for r in results if not r["available"]]
+    passed = all(r["exit_code"] == 0 for r in results if r["available"])
     STATE.parent.mkdir(parents=True, exist_ok=True)
     STATE.write_text(json.dumps({
         "fingerprint": current,
@@ -287,10 +323,15 @@ def main() -> int:
         "results": results,
     }, indent=2))
     if passed:
+        if unavailable:
+            missing = ", ".join(f"`{r['command']}`" for r in unavailable)
+            print(json.dumps({"systemMessage": f"agentic_init: could not run {missing}; that check is unverified."}))
         return 0
 
     failures = "\n\n".join(
-        f"$ {r['command']} (exit {r['exit_code']})\n{r['output_tail']}" for r in results if r["exit_code"]
+        f"$ {r['command']} (exit {r['exit_code']})\n{r['output_tail']}"
+        for r in results
+        if r["exit_code"] and r["available"]
     )
     print(json.dumps({"decision": "block", "reason": f"Verification failed. Fix before finishing:\n\n{failures}"}))
     return 0
@@ -298,6 +339,14 @@ def main() -> int:
 
 if __name__ == "__main__":
     sys.exit(main())
+
+=== .claude/ruff.toml
+# Generated by agentic_init: the hook scripts under .claude/ are generated,
+# not project source, so the project's linter and formatter skip them.
+extend-exclude = ["*"]
+
+[format]
+exclude = ["*"]
 
 === .claude/rules/architecture.md
 # Architecture rules
@@ -369,6 +418,8 @@ paths:
       "Bash(git clean *)",
       "Bash(git rebase)",
       "Bash(git rebase *)",
+      "Bash(uv sync)",
+      "Bash(uv sync *)",
       "Bash(git push)",
       "Bash(git push *)",
       "Bash(gh pr merge)",
@@ -585,6 +636,35 @@ description: Implement a well-defined change from acceptance criteria through te
 - Evidence: commands run and their results
 - Unresolved risks and follow-ups
 
+=== .claude/skills/refactor/SKILL.md
+---
+name: refactor
+description: Restructure code without changing behaviour, holding tests green at every step. Use when readability, duplication or coupling is the problem rather than a missing feature.
+---
+
+# Refactor
+
+## Inputs
+- The code to restructure and the specific problem with it (duplication, coupling, unclear naming, dead code).
+
+## Procedure
+1. Name the problem in one sentence. No problem, no refactor.
+2. Establish the safety net: find the tests that cover this behaviour. Missing or thin: write characterization tests first and commit them separately.
+3. Record the current behaviour you must preserve, including error cases and side effects.
+4. Refactor in small steps. After each step run `uv run pytest`; keep it green.
+5. Keep behaviour changes out. A bug you find becomes a separate task, not part of this diff.
+6. Run `uv run ruff check .`, `uv run mypy .` and re-read the diff.
+
+## Never
+- Mix a refactor with a feature or a fix in one commit.
+- Change public APIs, serialized formats or database schemas under the label "refactor".
+- Delete tests that became inconvenient.
+
+## Report
+- The problem, the structural change, and why it is safe
+- Evidence: tests run before and after
+- Behaviour deliberately left unchanged, and follow-ups
+
 === .claude/skills/review/SKILL.md
 ---
 name: review
@@ -693,6 +773,122 @@ description: Design and run tests for a change, filling coverage gaps for behavi
 - Commands run with pass/fail counts
 - Remaining untested risk
 
+=== .claude/skills/update-docs/SKILL.md
+---
+name: update-docs
+description: Bring CLAUDE.md, rules and the docs tree back in line with the code after a change, removing what is now false. Use when a change has invalidated documented behaviour, commands or architecture.
+---
+
+# Update docs
+
+Stale project docs are worse than missing ones: every future session reads them as fact.
+
+## Inputs
+- The change that made something out of date (a diff, a release, a new subsystem).
+
+## Procedure
+1. List what the change invalidated: commands, architecture, invariants, runbooks, ADRs, acceptance criteria.
+2. Check each claim against the code before rewriting it. Verify commands by running them.
+3. Update the smallest correct place:
+   - `CLAUDE.md`: stable, project-wide facts and commands only
+   - `.claude/rules/`: constraints that apply to a scope
+   - `docs/architecture/`: structure and data flow
+   - `docs/decisions/`: a new ADR when a decision changed; never rewrite history in an old one
+   - `docs/operations/`: runbooks
+4. Delete what is no longer true instead of appending a correction next to it.
+5. Keep `CLAUDE.md` short; move procedures into skills and detail into docs.
+6. If commands changed, update them in `agentic_init.yaml` under `commands:` and run `agentic_init apply` so generated files follow.
+
+## Never
+- Document intended behaviour as if it exists.
+- Copy the same fact into two files; link to the one that owns it.
+
+## Report
+- Files updated and what each claim now reflects
+- Evidence: commands re-run, code read
+- Anything you found stale but left alone, and why
+
+=== .github/pull_request_template.md
+## Summary
+
+<!-- What changed and why. Link the story or issue. -->
+
+## Architecture impact
+
+<!-- Boundaries, dependencies, public API. "None" is a valid answer. -->
+
+## Migration impact
+
+<!-- Schema, data, config or deployment steps. "None" is a valid answer. -->
+
+## Evidence
+
+| Check | Command | Result |
+| --- | --- | --- |
+| Lint | `uv run ruff check .` | |
+| Typecheck | `uv run mypy .` | |
+| Tests | `uv run pytest` | |
+
+## Security considerations
+
+<!-- Authn/authz, input handling, secrets, data exposure, new dependencies. -->
+
+## Performance considerations
+
+<!-- Hot paths, queries, payload sizes. -->
+
+## Residual risk
+
+<!-- What could still be wrong, and how it would show up. -->
+
+=== .github/workflows/agentic-checks.yml
+# Generated by agentic_init from the commands in CLAUDE.md.
+# The agent runs these locally; CI re-runs them as independent evidence.
+name: agentic checks
+'on':
+  push:
+    branches:
+    - main
+  pull_request: {}
+permissions:
+  contents: read
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+jobs:
+  checks:
+    name: checks
+    runs-on: ubuntu-latest
+    steps:
+    - &id001
+      name: Checkout
+      uses: actions/checkout@v4
+    - name: Set up uv
+      uses: astral-sh/setup-uv@v5
+      with:
+        enable-cache: true
+    - name: Install
+      run: uv sync
+    - name: Lint
+      run: uv run ruff check .
+    - name: Typecheck
+      run: uv run mypy .
+    - name: Test
+      run: uv run pytest
+  security:
+    name: security
+    runs-on: ubuntu-latest
+    if: github.event_name == 'pull_request'
+    permissions:
+      contents: read
+      pull-requests: write
+    steps:
+    - *id001
+    - name: Dependency review
+      uses: actions/dependency-review-action@v4
+      with:
+        fail-on-severity: high
+
 === .gitignore
 # agentic_init:begin agent-state
 .claude/settings.local.json
@@ -707,6 +903,17 @@ description: Design and run tests for a change, filling coverage gaps for behavi
       "url": "https://api.githubcopilot.com/mcp/",
       "headers": {
         "Authorization": "Bearer ${GITHUB_PERSONAL_ACCESS_TOKEN}"
+      }
+    },
+    "linear": {
+      "type": "http",
+      "url": "https://mcp.linear.app/mcp"
+    },
+    "sentry": {
+      "type": "http",
+      "url": "https://mcp.sentry.dev/mcp",
+      "headers": {
+        "Authorization": "Bearer ${SENTRY_ACCESS_TOKEN}"
       }
     }
   }
@@ -742,8 +949,21 @@ Autonomy: **A2 (Delegated implementation)**
 - Research, plan, implement and test on your own. Do not commit, push or open PRs unless asked.
 - Drop to A1 for production infrastructure.
 - Escalate instead of deciding: conflicting requirements, unclear architecture or business rules, destructive or irreversible actions, security trade-offs, production incidents.
-- Skills: `/implement`, `/test`, `/review`, `/debug`, `/spec`, `/security-review`, `/discover`, `/brownfield-change`, `/evidence-gate`. Use the matching skill instead of improvising a procedure.
+- Skills: `/implement`, `/test`, `/review`, `/debug`, `/spec`, `/security-review`, `/refactor`, `/update-docs`, `/discover`, `/brownfield-change`, `/evidence-gate`. Use the matching skill instead of improvising a procedure.
 - Agents: `reviewer`, `test-engineer`, `security-reviewer`. The agent that writes a change never approves it; delegate review to a read-only agent.
+
+### Autonomy by change
+Autonomy is per change, not per project. Raise it when verification is strong, lower it when the blast radius grows:
+
+| Change | Autonomy |
+| --- | --- |
+| Formatting, docs | A3 |
+| Test cleanup, isolated bug fix | A2 |
+| Normal feature | A2 |
+| Schema or data migration | A2 |
+| Auth, security or payment logic | A1–A2 |
+| Production infrastructure | A0–A1 |
+| Destructive production action | A0 (ask, never act) |
 
 ### Existing codebase
 Understand before improving. Read `docs/brownfield/` first and follow `/brownfield-change` for any behavior change. Prefer small, reversible changes.
@@ -760,6 +980,8 @@ When a mistake repeats, fix the system, not just the instance: update this file,
 3. Review your own diff (`git diff`) for scope creep and leftovers.
 4. Report: what changed, evidence (commands run and results), residual risk, follow-ups.
 
+The same checks run in CI (`.github/workflows/agentic-checks.yml`) as independent evidence. A claim is not done until CI agrees; fill in the evidence table in `.github/pull_request_template.md` when you open a PR.
+
 A Stop hook re-runs lint, typecheck and tests on any unverified commit or change and blocks completion while they fail.
 
 Work is complete only with evidence: run `/evidence-gate` before declaring a story done.
@@ -775,8 +997,11 @@ Bash runs in an OS sandbox that cannot read protected paths. If a command fails 
 - `docs/decisions/`: ADRs. Record every significant architectural decision.
 - `docs/stories/`: specs with acceptance criteria.
 - `docs/operations/`: runbooks.
-- `docs/brownfield/`: system map, critical paths, invariants, hotspots, test gaps.
+- `docs/brownfield/`: system map, critical paths, invariants, hotspots, test gaps, migration plan.
 - `docs/evidence/`: verification evidence per story.
+- `.github/`: CI checks and the pull request template.
+
+Start a task by loading context in this order: this file, the rules for the area you are touching, the story or issue, the docs above for that subsystem, then the code. Pick the matching skill before improvising, and delegate research to a subagent instead of filling this context with it.
 
 Keep this file short and stable. Procedures belong in skills, details in docs.
 <!-- agentic_init:end context -->
@@ -810,6 +1035,29 @@ Keep this file short and stable. Procedures belong in skills, details in docs.
 # Invariants
 
 <!-- Filled by /discover or `agentic_init enrich`. Mark unverified claims with (unverified). -->
+
+=== docs/brownfield/migration-plan.md
+# Migration plan
+
+How this system moves from where it is to where it should be. Replace the placeholders; delete what does not apply.
+
+## Target state
+<!-- The end state in one paragraph: what changes structurally, and why it is worth it. -->
+
+## Steps
+| # | Step | Blast radius | Reversible? | Evidence that it worked |
+| --- | --- | --- | --- | --- |
+| 1 | <!-- e.g. add new table alongside the old one --> | | yes | |
+| 2 | | | | |
+
+## Compatibility window
+<!-- What must keep working during the migration: API versions, data formats, clients, background jobs. -->
+
+## Rollback
+<!-- The exact way back from each step, and the point of no return. -->
+
+## Owner and status
+<!-- Who decides, and where the migration currently stands. -->
 
 === docs/brownfield/system-map.md
 # System map

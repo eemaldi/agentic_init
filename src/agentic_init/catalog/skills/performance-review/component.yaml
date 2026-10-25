@@ -1,0 +1,1 @@
+description: Review a change or hot path for performance risk using measurements rather than intuition, covering queries, allocations, payloads and concurrency. Use for changes on hot paths or when latency or cost regressed.

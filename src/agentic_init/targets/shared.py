@@ -1,4 +1,5 @@
 from agentic_init.blueprint import Blueprint
+from agentic_init.ci import render_ci
 from agentic_init.config import Kind
 from agentic_init.targets.base import Block, FileOp, Strategy
 
@@ -12,4 +13,4 @@ def render_shared(blueprint: Blueprint) -> list[FileOp]:
         for path, content in doc.files.items()
     ]
     gitignore = FileOp(".gitignore", Strategy.BLOCKS, blocks=(Block("agent-state", "\n".join(IGNORED)),))
-    return [*seeds, gitignore]
+    return [*seeds, gitignore, *render_ci(blueprint)]

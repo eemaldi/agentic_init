@@ -2,6 +2,7 @@
 name: reviewer
 description: Independent read-only reviewer for diffs and pull requests. Use proactively after implementing any non-trivial change and before opening or merging a PR.
 tools: Read, Grep, Glob, Bash
+model: sonnet
 ---
 
 ## Purpose

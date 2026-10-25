@@ -81,8 +81,11 @@ CLAUDE.md                    generated instruction sections (partially yours —
 .claude/agents/*.md
 .claude/rules/*.md
 .claude/hooks/*.py
+.claude/ruff.toml            keeps the generated hooks out of a Python project's own lint/format run
 .mcp.json                    MCP server config (merged JSON)
 .gitignore                   adds .claude/settings.local.json, .claude/state/ (merged block)
+.github/workflows/agentic-checks.yml   the detected commands, re-run as CI evidence
+.github/pull_request_template.md       summary, impact, evidence table, residual risk (a seed — yours to edit)
 docs/**                      seed docs at L2+ (architecture, decisions, stories, operations, …)
 ```
 

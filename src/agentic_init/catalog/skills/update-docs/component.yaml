@@ -1,0 +1,1 @@
+description: Bring CLAUDE.md, rules and the docs tree back in line with the code after a change, removing what is now false. Use when a change has invalidated documented behaviour, commands or architecture.

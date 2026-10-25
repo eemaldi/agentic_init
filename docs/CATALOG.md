@@ -15,11 +15,16 @@ catalog directory live).
 | `discover` | Map an unfamiliar codebase or subsystem into durable architecture notes before changing it. Use at the start of work in an area without documentation. |
 | `evidence-gate` | Verify a story or task is actually complete by collecting objective evidence for every acceptance criterion. Use before declaring any story done. |
 | `implement` | Implement a well-defined change from acceptance criteria through tests and verified evidence. Use for any feature or fix with clear requirements. |
+| `incident-analysis` | Investigate a production incident from symptom to contributing causes and durable follow-ups, using logs, traces and recent changes. Use when something is broken in a running environment. |
+| `migrate-db` | Plan and apply a database schema or data migration with an expand/contract sequence, verification and a rollback path. Invoke explicitly for any schema or data change. |
+| `performance-review` | Review a change or hot path for performance risk using measurements rather than intuition, covering queries, allocations, payloads and concurrency. Use for changes on hot paths or when latency or cost regressed. |
+| `refactor` | Restructure code without changing behaviour, holding tests green at every step. Use when readability, duplication or coupling is the problem rather than a missing feature. |
 | `release` | Prepare a release with changelog, version bump, verification and tagging. Invoke explicitly only. |
 | `review` | Review a diff or pull request for correctness, design, security and test gaps, producing prioritized findings. Use before merging any non-trivial change. |
 | `security-review` | Adversarial security review of a change or area covering authn/authz, input handling, secrets, dependencies and data exposure. Use for any change touching auth, user input, data access or infrastructure. |
 | `spec` | Turn an idea or request into a story with context, constraints, acceptance criteria and verification plan. Use before implementing anything ambiguous. |
 | `test` | Design and run tests for a change, filling coverage gaps for behavior, edge cases and failure modes. Use when adding tests or when verification is missing. |
+| `update-docs` | Bring CLAUDE.md, rules and the docs tree back in line with the code after a change, removing what is now false. Use when a change has invalidated documented behaviour, commands or architecture. |
 
 ## Agents (`.claude/agents/<name>.md`)
 
@@ -54,13 +59,17 @@ catalog directory live).
 | Server | Description |
 |---|---|
 | `github` | GitHub repositories, issues, pull requests and Actions via the official remote MCP server. Requires `GITHUB_PERSONAL_ACCESS_TOKEN` in the environment (checked by `doctor`). |
+| `linear` | Linear issues, projects and cycles, so stories and acceptance criteria come from the tracker instead of chat. |
+| `playwright` | Drives a real browser to inspect pages, take screenshots and verify UI behaviour end to end. |
+| `postgres` | Read-only PostgreSQL access for schema inspection and query verification. Point DATABASE_URL_READONLY at a replica or a least-privilege role. |
+| `sentry` | Sentry issues, stack traces and releases, for diagnosing production errors from real telemetry. |
 
 ## Docs seeds (`docs/**`, written once with `Strategy.SEED`)
 
 | Doc | Description | Seed path(s) |
 |---|---|---|
 | `architecture` | System overview, boundaries and data flow. | `docs/architecture/system-overview.md` |
-| `brownfield` | Machine-readable map of an existing system. | `docs/brownfield/{system-map,hotspots,critical-paths,invariants,test-gaps}.md` |
+| `brownfield` | Machine-readable map of an existing system. | `docs/brownfield/{system-map,hotspots,critical-paths,invariants,test-gaps,migration-plan}.md` |
 | `decisions` | Architecture decision records. | `docs/decisions/0000-template.md` |
 | `evidence` | Verification evidence per story. | `docs/evidence/_template.md` |
 | `operations` | Runbooks and operational knowledge. | `docs/operations/runbook.md` |

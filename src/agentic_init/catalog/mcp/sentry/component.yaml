@@ -1,0 +1,7 @@
+description: Sentry issues, stack traces and releases, for diagnosing production errors from real telemetry.
+env: [SENTRY_ACCESS_TOKEN]
+server:
+  type: http
+  url: https://mcp.sentry.dev/mcp
+  headers:
+    Authorization: "Bearer ${SENTRY_ACCESS_TOKEN}"

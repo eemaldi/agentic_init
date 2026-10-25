@@ -57,6 +57,7 @@ commands:                       # override/disable detected commands; set a valu
   typecheck: null
   e2e: null
 
+ci: null                        # true/false to force the CI workflow + PR template; omit to decide from the repository
 enrich: false                   # generate the agentic_init-enrich skill (`agentic_init enrich` then runs it)
 ```
 
@@ -80,12 +81,15 @@ Each level *adds* to the catalog selection cumulatively (`presets.py`,
 
 - **L1**: skills `implement`, `test`, `review`; agent `reviewer`; hooks
   `block-dangerous-commands`, `protect-secrets`; MCP `github`.
-- **L2** (+L1): skills `debug`, `spec`, `security-review`; agents
-  `test-engineer`, `security-reviewer`; hook `post-edit-format`; rules
-  `architecture`, `testing`, `security`; docs `architecture`, `decisions`,
-  `stories`, `operations`.
-- **L3** (+L2): skills `discover`, `release`; agents `explorer`,
-  `architect`; hook `verify-completion`.
+- **L2** (+L1): skills `debug`, `spec`, `security-review`, `refactor`,
+  `update-docs`; agents `test-engineer`, `security-reviewer`; hook
+  `post-edit-format`; rules `architecture`, `testing`, `security`; MCP
+  `linear`, `sentry`; docs `architecture`, `decisions`, `stories`,
+  `operations`. CI also gains a dependency-review job, and an e2e job when
+  an e2e command is detected.
+- **L3** (+L2): skills `discover`, `release`, `migrate-db`,
+  `performance-review`, `incident-analysis`; agents `explorer`,
+  `architect`; hook `verify-completion`; MCP `playwright`.
 - **L4** (+L3): hook `audit-log`. Also raises `Policy.enterprise`
   (MCP allowlisting) and `Policy.sandbox` to `"strict"`, and denies
   `curl`/`wget`/`ssh`/`scp`.
@@ -95,7 +99,8 @@ Each level *adds* to the catalog selection cumulatively (`presets.py`,
 ## Mode (`greenfield` | `brownfield`)
 
 `brownfield` adds skills `discover`, `brownfield-change` and docs
-`brownfield` (system map, hotspots, critical paths, invariants, test gaps)
+`brownfield` (system map, hotspots, critical paths, invariants, test gaps,
+migration plan)
 on top of whatever the level preset selects, and lowers `default_autonomy`
 by one step (floor A1) — the idea being an agent should understand existing
 code before it's trusted to act on it as autonomously as it would in a
@@ -135,6 +140,17 @@ a PR, never merge) — consistent with what `agentic_init.yaml`
 - **`bmad`**: adds nothing to the catalog directly; the CLI's "Next steps"
   suggest running `npx bmad-method@latest install` if it isn't already
   present and `npx` is available (`cli.py::_apply`, `modules/bmad.py`).
+
+## CI (`ci`)
+
+Left unset, a CI workflow is generated for a level ≥1 project that lives on
+GitHub (a `github.com` remote, or an existing `.github/` directory);
+`ci: true` forces it anywhere, `ci: false` turns it off and retires the
+generated workflow on the next `apply`. It writes
+`.github/workflows/agentic-checks.yml` (owned) from the same detected
+commands as `CLAUDE.md` — lint, typecheck, test, build, plus an e2e job and
+a dependency-review job from L2 — and `.github/pull_request_template.md`
+(a seed, so your edits stick), whose evidence table lists those commands.
 
 `enrich: true` similarly adds the `agentic_init-enrich` skill
 (`modules/__init__.py`) so `agentic_init enrich` has something to invoke.

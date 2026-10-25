@@ -11,7 +11,7 @@ SNAPSHOTS = Path(__file__).parent / "snapshots"
 CASES = {
     "l0-greenfield": dict(level=0, mode=Mode.GREENFIELD),
     "l1-greenfield": dict(level=1, mode=Mode.GREENFIELD),
-    "l2-brownfield-aidlc": dict(level=2, mode=Mode.BROWNFIELD, modules=Modules(aidlc=True)),
+    "l2-brownfield-aidlc": dict(level=2, mode=Mode.BROWNFIELD, modules=Modules(aidlc=True), ci=True),
     "l3-greenfield-bmad": dict(level=3, mode=Mode.GREENFIELD, modules=Modules(bmad=True), enrich=True),
     "l4-brownfield": dict(level=4, mode=Mode.BROWNFIELD),
 }

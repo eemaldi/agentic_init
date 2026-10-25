@@ -3,7 +3,7 @@
   "files": {
     ".claude/agents/reviewer.md": {
       "strategy": "owned",
-      "hash": "67e0f076003dd07b80db4c61ca87eefb4c9213dc2cd24fa5511ec4598d4563e4"
+      "hash": "bd339481b49e7712acb16012e4a61cf10cf92c9765bf8f844c412568a1ec89ef"
     },
     ".claude/hooks/block-dangerous-commands.py": {
       "strategy": "owned",
@@ -15,7 +15,11 @@
     },
     ".claude/hooks/protect-secrets.py": {
       "strategy": "owned",
-      "hash": "94e25aa7f7d635bfa0400013693c41995efdf5ed74fad55f7451df64182be262"
+      "hash": "4940b02d53c8797369ea0cd7e40581449494d413bfd33b98119e7b4bf934b7ac"
+    },
+    ".claude/ruff.toml": {
+      "strategy": "owned",
+      "hash": "f8a5fdc52ed9cbb0871a52c94964db890f459c185cb1af4166a14f020053ad0a"
     },
     ".claude/settings.json": {
       "strategy": "json",
@@ -63,6 +67,8 @@
             "Bash(git clean *)",
             "Bash(git rebase)",
             "Bash(git rebase *)",
+            "Bash(uv sync)",
+            "Bash(uv sync *)",
             "Bash(git push)",
             "Bash(git push *)",
             "Bash(gh pr merge)",
@@ -143,6 +149,10 @@
       "strategy": "owned",
       "hash": "b3f7446b278452d8f3099d7d9a6ce13d8f72027ab618433b139189350e43b8c6"
     },
+    ".github/workflows/agentic-checks.yml": {
+      "strategy": "owned",
+      "hash": "ff0330d44d99bc85d4d095398790e11978e8c8c1d3bd9cb4d8908995babb1baf"
+    },
     ".gitignore": {
       "strategy": "blocks",
       "blocks": [
@@ -169,7 +179,8 @@
         "project",
         "commands",
         "workflow",
-        "verification"
+        "verification",
+        "context"
       ]
     }
   }

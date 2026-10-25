@@ -1,6 +1,11 @@
 # agentic_init
 
-Bootstrap any repository for agentic development with Claude Code: `CLAUDE.md`, skills, agents, hooks, rules, permissions, MCP and docs, sized to your project and autonomy level.
+Bootstrap any repository for agentic development with Claude Code: `CLAUDE.md`, skills, agents, hooks,
+rules, permissions, MCP, docs and CI, sized to your project and autonomy level.
+
+Everything is generated from the commands and stack it detects in your repository, so the agent's
+instructions, its guardrails and your CI all run the same checks. Re-running is safe: generated files are
+tracked in `.agentic_init.lock`, local edits are never overwritten silently.
 
 ```sh
 uvx agentic_init init       # detect, answer a few questions, generate
@@ -11,6 +16,20 @@ agentic_init catalog          # list available components
 agentic_init schema > agentic_init.schema.json
 ```
 
+## What you get
+
+| Level | Generated |
+| --- | --- |
+| 0 | `CLAUDE.md` with the detected stack, commands and working agreement |
+| 1 | + `/implement` `/test` `/review`, a read-only `reviewer` agent, secret and dangerous-command hooks, GitHub MCP, a CI workflow and a PR template |
+| 2 | + scoped rules, `docs/` (architecture, decisions, stories, operations), `test-engineer` and `security-reviewer`, formatter hook, tracker and observability MCP, e2e and dependency-review CI jobs, sandboxed Bash |
+| 3 | + `explorer` and `architect`, migration/performance/incident skills, browser MCP, a Stop hook that re-runs the checks before the agent may finish |
+| 4 | + audit logging, a strict sandbox and an MCP allowlist |
+
+Brownfield repositories additionally get `docs/brownfield/` (system map, critical paths, invariants,
+hotspots, test gaps, migration plan) and a `/brownfield-change` procedure; `agentic_init enrich` runs Claude
+Code once to fill those documents from the actual code.
+
 ## Documentation
 
 - [Setup Guide](docs/SETUP.md) — install, bootstrap a project, what gets written
@@ -20,3 +39,4 @@ agentic_init schema > agentic_init.schema.json
 - [Catalog Reference](docs/CATALOG.md) — every skill, agent, hook, rule, MCP server and doc seed
 - [Extending agentic_init](docs/EXTENDING.md) — add a catalog component or a new target tool
 - [Verification Log](docs/VERIFICATION.md) — what was actually run to confirm this documentation, and what wasn't
+- [Operating-model coverage](docs/guideline-coverage.md) — each section of the operating model mapped to the artifact that manifests it

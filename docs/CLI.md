@@ -49,7 +49,13 @@ config would produce (`doctor.diagnose()`):
 4. Every resolved project command's executable is runnable (`shutil.which`);
    WARN if there's no `test` command at all.
 5. Every `${VAR}` referenced in `.mcp.json` is set in the environment.
-6. No generated `owned` file differs from what's in `.agentic_init.lock`
+6. If a sandbox is configured (L2+), `bwrap` and `socat` are installed, so
+   Bash is not silently running unsandboxed.
+7. The generated CI workflow exists, is valid YAML and runs the project's
+   own test command (WARN when a level ≥1 project has no CI at all).
+8. No seeded doc under `docs/` is still byte-identical to its template
+   (WARN to fill it in or run `agentic_init enrich`).
+9. No generated `owned` file differs from what's in `.agentic_init.lock`
    (drift), and no pending changes remain (config and generated files agree).
 
 Exits 1 if any finding is `ERROR` (currently only "no config" / "no

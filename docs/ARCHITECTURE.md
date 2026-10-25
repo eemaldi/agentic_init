@@ -49,18 +49,19 @@ plan rather than a description of one.
 | Module | Responsibility |
 |---|---|
 | `config.py` | `Config` (the `agentic_init.yaml` schema, pydantic, `extra="forbid"`), load/save, validation |
-| `detect/` | Read the target repo: `stack.py` (languages/package managers/frameworks from manifests and lockfiles), `commands.py` (install/dev/build/test/lint/format/typecheck/e2e from Makefile, justfile, `package.json` scripts, Python/Rust/Go conventions), `git.py` (repo age, GitHub remote) |
+| `detect/` | Read the target repo: `stack.py` (languages/package managers/frameworks from manifests and lockfiles), `commands.py` (install/dev/build/test/lint/format/typecheck/e2e from Makefile, justfile, `package.json` scripts, Python/Rust/Go conventions), `git.py` (repo age, GitHub remote, default branch), `project.py` (project name/description from the manifest, monorepo workspaces) |
 | `presets.py` | Level × mode → cumulative catalog selection (`preset()`), and level/mode → default autonomy (`default_autonomy()`) |
 | `catalog.py` | Loads a catalog item's `component.yaml` metadata and enumerates its template files |
 | `resolver.py` | `select()` merges preset + module selections + include/exclude into a final `Kind → [name]` map; `resolve()` renders every selected item's Jinja templates and the `CLAUDE.md` instruction sections into a `Blueprint` |
 | `blueprint.py` | Tool-agnostic output: `Blueprint`, `Component`, `Section`, `Policy` — dataclasses, no file-format knowledge |
 | `policy.py` | Turns `(autonomy, level, commands)` into a `Policy`: allowed/ask/denied shell commands, protected paths, edit mode, sandbox level |
-| `targets/` | Render a `Blueprint` into `FileOp`s for one tool. `base.py` defines `FileOp`/`Strategy`/`Block`; `claude_code.py` is the only target today (`CLAUDE.md`, `.claude/settings.json`, skills, agents, rules, hooks, `.mcp.json`); `shared.py` adds `.gitignore` and doc seeds for every target |
+| `targets/` | Render a `Blueprint` into `FileOp`s for one tool. `base.py` defines `FileOp`/`Strategy`/`Block`; `claude_code.py` is the only target today (`CLAUDE.md`, `.claude/settings.json`, skills, agents, rules, hooks, `.mcp.json`); `shared.py` adds `.gitignore`, doc seeds and the CI files for every target |
+| `ci.py` | Renders `.github/workflows/agentic-checks.yml` and `.github/pull_request_template.md` from the same detected commands the instructions use |
 | `writer.py` | Turns `FileOp`s into a `Plan` of `Change`s against disk state and `.agentic_init.lock`, then applies pending changes |
 | `merge.py` | The merge primitives: recursive dict/list `merge`/`unmerge` for JSON files, marker-delimited `upsert_blocks` for `CLAUDE.md`/`.gitignore` |
 | `lock.py` | `.agentic_init.lock`: per-file strategy + content hash (owned files) or owned JSON subtree/block ids, so re-runs and hand-edits are distinguishable |
 | `engine.py` | `build()` ties `resolve()` → target rendering → `writer.plan()` into one call used by every CLI command |
-| `doctor.py` | Independent checks against the built plan and the files on disk: `CLAUDE.md` size, skill/agent description quality, hook script presence, command runnability, MCP env vars, drift |
+| `doctor.py` | Independent checks against the built plan and the files on disk: `CLAUDE.md` size, skill/agent description quality, hook script presence, command runnability, MCP env vars, sandbox dependencies, CI coverage, doc seeds still holding their template, drift |
 | `wizard.py` | The interactive `questionary` prompts behind `agentic_init init` (skipped by `--yes`, which uses `wizard.defaults()`) |
 | `enrich.py` | Shells out to `claude -p /agentic_init-enrich` to run a Claude Code pass that fills the generated docs with real project knowledge |
 | `modules/bmad.py` | Detects/installs the optional BMAD planning workflow via `npx bmad-method@latest install` |
